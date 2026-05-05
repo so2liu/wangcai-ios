@@ -51,7 +51,7 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
             Section("关于") {
-                Text("旺财 WorthSnap")
+                Text("旺财")
                 Text("V1.0 测试版")
                     .foregroundStyle(.secondary)
             }
