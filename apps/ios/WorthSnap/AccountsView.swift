@@ -1,0 +1,228 @@
+import SwiftUI
+import WorthSnapShared
+
+struct AccountsView: View {
+    @EnvironmentObject private var store: AppStore
+    @State private var showingAdd = false
+    @State private var editingAccount: Account?
+    @State private var showArchived = false
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Toggle("显示归档账户", isOn: $showArchived)
+                ForEach(store.data.accounts.filter { showArchived || !$0.archived }.sorted(by: { $0.sortOrder < $1.sortOrder })) { account in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(account.name)
+                                .font(.headline)
+                            Text("\(account.direction.title) · \(store.typeName(id: account.typeId)) · \(account.currency) · \(account.ownership.title)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        if account.archived {
+                            Text("已归档")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        editingAccount = account
+                    }
+                    .swipeActions {
+                        Button(account.archived ? "恢复" : "归档") {
+                            store.toggleArchive(account: account)
+                        }
+                        .tint(account.archived ? .green : .orange)
+                    }
+                }
+            }
+            .navigationTitle("账户")
+            .toolbar {
+                Button {
+                    showingAdd = true
+                } label: {
+                    Image(systemName: "plus")
+                }
+            }
+            .sheet(isPresented: $showingAdd) {
+                AccountFormView(mode: .add)
+            }
+            .sheet(item: $editingAccount) { account in
+                AccountFormView(mode: .edit(account))
+            }
+        }
+    }
+}
+
+private enum AccountFormMode {
+    case add
+    case edit(Account)
+
+    var title: String {
+        switch self {
+        case .add:
+            return "新增账户"
+        case .edit:
+            return "编辑账户"
+        }
+    }
+}
+
+private struct AccountFormView: View {
+    @EnvironmentObject private var store: AppStore
+    @Environment(\.dismiss) private var dismiss
+    private let currencies = ["CNY", "USD", "HKD", "EUR", "JPY", "GBP", "SGD", "AUD", "CAD"]
+    let mode: AccountFormMode
+    @State private var name: String
+    @State private var direction: Direction
+    @State private var currency: String
+    @State private var ownership: Ownership
+    @State private var selectedTypeId: UUID?
+    @State private var pendingSensitiveSave = false
+
+    var filteredTypes: [AccountType] {
+        store.data.accountTypes.filter { $0.direction == direction && !$0.archived }
+    }
+
+    private var availableCurrencies: [String] {
+        currencies.contains(normalizedCurrency) ? currencies : currencies + [normalizedCurrency]
+    }
+
+    private var normalizedCurrency: String {
+        let trimmed = currency.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        return trimmed.isEmpty ? "CNY" : trimmed
+    }
+
+    private var sensitiveChangeMessage: String? {
+        guard case .edit(let account) = mode else { return nil }
+        var changes: [String] = []
+        if account.currency != normalizedCurrency {
+            changes.append("币种会从 \(currencyTitle(account.currency)) 改为 \(currencyTitle(normalizedCurrency))。已有快照明细会保留原币种、汇率和折算金额；新的快照会使用新币种。")
+        }
+        if account.direction != direction {
+            changes.append("方向会从 \(account.direction.title) 改为 \(direction.title)，这会影响历史快照里该账户归入总资产还是总负债。")
+        }
+        return changes.isEmpty ? nil : changes.joined(separator: "\n\n")
+    }
+
+    init(mode: AccountFormMode) {
+        self.mode = mode
+        switch mode {
+        case .add:
+            _name = State(initialValue: "")
+            _direction = State(initialValue: .asset)
+            _currency = State(initialValue: "CNY")
+            _ownership = State(initialValue: .me)
+            _selectedTypeId = State(initialValue: nil)
+        case .edit(let account):
+            _name = State(initialValue: account.name)
+            _direction = State(initialValue: account.direction)
+            _currency = State(initialValue: account.currency)
+            _ownership = State(initialValue: account.ownership)
+            _selectedTypeId = State(initialValue: account.typeId)
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("账户名称", text: $name)
+                    .keyboardDismissToolbar()
+                Picker("方向", selection: $direction) {
+                    ForEach(Direction.allCases) { Text($0.title).tag($0) }
+                }
+                Picker("类型", selection: Binding(
+                    get: { selectedTypeId ?? filteredTypes.first?.id },
+                    set: { selectedTypeId = $0 }
+                )) {
+                    ForEach(filteredTypes) { type in
+                        Text(type.name).tag(Optional(type.id))
+                    }
+                }
+                Picker("币种", selection: $currency) {
+                    ForEach(availableCurrencies, id: \.self) { code in
+                        Text(currencyTitle(code)).tag(code)
+                    }
+                }
+                Picker("归属", selection: $ownership) {
+                    ForEach(Ownership.allCases) { Text($0.title).tag($0) }
+                }
+                if case .edit = mode {
+                    Section {
+                        Text("修改币种不会重算已有快照；如需调整某个月的币种或汇率，请在该月快照明细里单独处理。修改资产/负债方向会影响历史统计口径。")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .navigationTitle(mode.title)
+            .onChange(of: direction) { _, newDirection in
+                if !filteredTypes.contains(where: { $0.id == selectedTypeId && $0.direction == newDirection }) {
+                    selectedTypeId = filteredTypes.first?.id
+                }
+            }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存") {
+                        if sensitiveChangeMessage == nil {
+                            save()
+                        } else {
+                            pendingSensitiveSave = true
+                        }
+                    }
+                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || filteredTypes.isEmpty)
+                }
+            }
+            .alert("确认修改账户口径？", isPresented: $pendingSensitiveSave) {
+                Button("取消", role: .cancel) {}
+                Button("确认保存", role: .destructive) {
+                    save()
+                }
+            } message: {
+                Text(sensitiveChangeMessage ?? "")
+            }
+        }
+    }
+
+    private func save() {
+        let typeId = selectedTypeId ?? filteredTypes.first!.id
+        switch mode {
+        case .add:
+            store.addAccount(name: name, direction: direction, typeId: typeId, currency: normalizedCurrency, ownership: ownership)
+        case .edit(let account):
+            store.updateAccount(account, name: name, direction: direction, typeId: typeId, currency: normalizedCurrency, ownership: ownership)
+        }
+        dismiss()
+    }
+
+    private func currencyTitle(_ code: String) -> String {
+        switch code {
+        case "CNY":
+            return "人民币 CNY"
+        case "USD":
+            return "美元 USD"
+        case "HKD":
+            return "港币 HKD"
+        case "EUR":
+            return "欧元 EUR"
+        case "JPY":
+            return "日元 JPY"
+        case "GBP":
+            return "英镑 GBP"
+        case "SGD":
+            return "新加坡元 SGD"
+        case "AUD":
+            return "澳元 AUD"
+        case "CAD":
+            return "加元 CAD"
+        default:
+            return code
+        }
+    }
+}
