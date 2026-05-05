@@ -30,7 +30,7 @@ public struct Ledger: Codable, Equatable, Identifiable, Sendable {
     public var createdAt: Date
     public var updatedAt: Date
 
-    public init(id: UUID = UUID(), name: String = "月余账本", baseCurrency: String = "CNY", createdAt: Date = Date(), updatedAt: Date = Date()) {
+    public init(id: UUID = UUID(), name: String = "旺财账本", baseCurrency: String = "CNY", createdAt: Date = Date(), updatedAt: Date = Date()) {
         self.id = id
         self.name = name
         self.baseCurrency = baseCurrency

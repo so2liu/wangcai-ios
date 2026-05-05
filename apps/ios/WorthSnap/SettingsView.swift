@@ -46,12 +46,12 @@ struct SettingsView: View {
                 }
             }
             Section("隐私") {
-                Text("月余不连接银行、券商或支付账户；资产数据保存在本机，未来通过用户自己的 iCloud 私有同步。")
+                Text("旺财不连接银行、券商或支付账户；资产数据保存在本机，未来通过用户自己的 iCloud 私有同步。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
             Section("关于") {
-                Text("月余 WorthSnap")
+                Text("旺财 WorthSnap")
                 Text("V1.0 测试版")
                     .foregroundStyle(.secondary)
             }

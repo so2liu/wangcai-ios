@@ -68,7 +68,7 @@ struct OverviewView: View {
                 }
                 .padding()
             }
-            .navigationTitle("月余")
+            .navigationTitle("旺财")
             .toolbar {
                 NavigationLink(destination: SettingsView()) {
                     Image(systemName: "gearshape")

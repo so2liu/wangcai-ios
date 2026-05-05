@@ -1,4 +1,4 @@
-# 月余 iOS
+# 旺财 iOS
 
 打开 `WorthSnap.xcodeproj`，选择 `WorthSnap` scheme，在 Signing & Capabilities 中选择你的 Apple Developer Team，然后连接 iPhone 运行。
 
