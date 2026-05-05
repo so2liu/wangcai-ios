@@ -1,0 +1,391 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		1F0EC0DD2AA3C33317B4E70F /* AccountsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F92A37C21BF96AA7C9673A31 /* AccountsView.swift */; };
+		1F5CA1C259EADC86DB4BBE9C /* OverviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB2CD2DB5516DFBDD64F9A3D /* OverviewView.swift */; };
+		1F9C0AB019A2260C9C8FD129 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2B5AE268C74CA2A94469DB8 /* SettingsView.swift */; };
+		32D66CE21EAAFFFFC2FDD532 /* TrendView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B7C25F044A065F46AAB572A /* TrendView.swift */; };
+		53C5FDBE5A14B65754EB3614 /* WorthSnapShared in Frameworks */ = {isa = PBXBuildFile; productRef = 6F253E8B8E2929D79883B09E /* WorthSnapShared */; };
+		6BF8B77517C54E2AC224AA85 /* SnapshotView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AF40CA60690E568C9D2C834 /* SnapshotView.swift */; };
+		84286EEFAD37EC48CDA06259 /* WorthSnapApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0E8D0910FDF88D4C1DED08F /* WorthSnapApp.swift */; };
+		9FE5C80147833105C17ED89C /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D18ABCAA10A6DBA5B2766F79 /* RootView.swift */; };
+		C6079401810B4287A69E69F7 /* KeyboardDismissModifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEE62918172DD635D45365FF /* KeyboardDismissModifier.swift */; };
+		D1D41FAB7AC35970EE67C0A3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F8660AEDA52799C3E1A9BDCD /* Assets.xcassets */; };
+		D796FC1E2A385048541910B8 /* Formatters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 341D8FAB9EADFDAD97692AF0 /* Formatters.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		0B08A542FAA25D1067766A3F /* shared */ = {isa = PBXFileReference; lastKnownFileType = folder; name = shared; path = ../../packages/shared; sourceTree = SOURCE_ROOT; };
+		0B7C25F044A065F46AAB572A /* TrendView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrendView.swift; sourceTree = "<group>"; };
+		31B72461409840853566FCBA /* WorthSnap.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = WorthSnap.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		341D8FAB9EADFDAD97692AF0 /* Formatters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Formatters.swift; sourceTree = "<group>"; };
+		3AF40CA60690E568C9D2C834 /* SnapshotView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnapshotView.swift; sourceTree = "<group>"; };
+		A2B5AE268C74CA2A94469DB8 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		AEE62918172DD635D45365FF /* KeyboardDismissModifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardDismissModifier.swift; sourceTree = "<group>"; };
+		D18ABCAA10A6DBA5B2766F79 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		DB2CD2DB5516DFBDD64F9A3D /* OverviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverviewView.swift; sourceTree = "<group>"; };
+		E0E8D0910FDF88D4C1DED08F /* WorthSnapApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorthSnapApp.swift; sourceTree = "<group>"; };
+		F8660AEDA52799C3E1A9BDCD /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		F92A37C21BF96AA7C9673A31 /* AccountsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountsView.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		11D86E59E61F7ACCA51D61AA /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				53C5FDBE5A14B65754EB3614 /* WorthSnapShared in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		1A975EA8A2D812A3D37D455C /* WorthSnap */ = {
+			isa = PBXGroup;
+			children = (
+				F92A37C21BF96AA7C9673A31 /* AccountsView.swift */,
+				F8660AEDA52799C3E1A9BDCD /* Assets.xcassets */,
+				341D8FAB9EADFDAD97692AF0 /* Formatters.swift */,
+				AEE62918172DD635D45365FF /* KeyboardDismissModifier.swift */,
+				DB2CD2DB5516DFBDD64F9A3D /* OverviewView.swift */,
+				D18ABCAA10A6DBA5B2766F79 /* RootView.swift */,
+				A2B5AE268C74CA2A94469DB8 /* SettingsView.swift */,
+				3AF40CA60690E568C9D2C834 /* SnapshotView.swift */,
+				0B7C25F044A065F46AAB572A /* TrendView.swift */,
+				E0E8D0910FDF88D4C1DED08F /* WorthSnapApp.swift */,
+			);
+			path = WorthSnap;
+			sourceTree = "<group>";
+		};
+		1BF3851E2E9C0C6133B1666A /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				0B08A542FAA25D1067766A3F /* shared */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		318ABF4F535D99A76A03ADD6 = {
+			isa = PBXGroup;
+			children = (
+				1BF3851E2E9C0C6133B1666A /* Packages */,
+				1A975EA8A2D812A3D37D455C /* WorthSnap */,
+				35A12C2DA965E22895071C9A /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		35A12C2DA965E22895071C9A /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				31B72461409840853566FCBA /* WorthSnap.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		C497A9CEF26C27149771F4F5 /* WorthSnap */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 67610F3E1FB0C58A0C76CF12 /* Build configuration list for PBXNativeTarget "WorthSnap" */;
+			buildPhases = (
+				E41F304BC7BE16776CADF725 /* Sources */,
+				9868469A7734812B4B9027CD /* Resources */,
+				11D86E59E61F7ACCA51D61AA /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = WorthSnap;
+			packageProductDependencies = (
+				6F253E8B8E2929D79883B09E /* WorthSnapShared */,
+			);
+			productName = WorthSnap;
+			productReference = 31B72461409840853566FCBA /* WorthSnap.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		6CD86EB5FECCEE4BE3389E31 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					C497A9CEF26C27149771F4F5 = {
+						DevelopmentTeam = 366ADQ28F6;
+					};
+				};
+			};
+			buildConfigurationList = 7FE659C6A53B16184E821C9C /* Build configuration list for PBXProject "WorthSnap" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 318ABF4F535D99A76A03ADD6;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				BAD7D99344AFE5D4FA3D2DD6 /* XCLocalSwiftPackageReference "../../packages/shared" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 35A12C2DA965E22895071C9A /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				C497A9CEF26C27149771F4F5 /* WorthSnap */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		9868469A7734812B4B9027CD /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D1D41FAB7AC35970EE67C0A3 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		E41F304BC7BE16776CADF725 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1F0EC0DD2AA3C33317B4E70F /* AccountsView.swift in Sources */,
+				D796FC1E2A385048541910B8 /* Formatters.swift in Sources */,
+				C6079401810B4287A69E69F7 /* KeyboardDismissModifier.swift in Sources */,
+				1F5CA1C259EADC86DB4BBE9C /* OverviewView.swift in Sources */,
+				9FE5C80147833105C17ED89C /* RootView.swift in Sources */,
+				1F9C0AB019A2260C9C8FD129 /* SettingsView.swift in Sources */,
+				6BF8B77517C54E2AC224AA85 /* SnapshotView.swift in Sources */,
+				32D66CE21EAAFFFFC2FDD532 /* TrendView.swift in Sources */,
+				84286EEFAD37EC48CDA06259 /* WorthSnapApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		3F113680A0088B46CDE0D987 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 366ADQ28F6;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "旺财";
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yueyu.WorthSnap;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		44C0A96EE9B8347E3FC55777 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		76F1529FDDE0C34976E856A9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		792B6BDE04FC8AF046E5FB8D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 366ADQ28F6;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "旺财";
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yueyu.WorthSnap;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		67610F3E1FB0C58A0C76CF12 /* Build configuration list for PBXNativeTarget "WorthSnap" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3F113680A0088B46CDE0D987 /* Debug */,
+				792B6BDE04FC8AF046E5FB8D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		7FE659C6A53B16184E821C9C /* Build configuration list for PBXProject "WorthSnap" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				44C0A96EE9B8347E3FC55777 /* Debug */,
+				76F1529FDDE0C34976E856A9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		BAD7D99344AFE5D4FA3D2DD6 /* XCLocalSwiftPackageReference "../../packages/shared" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../packages/shared;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		6F253E8B8E2929D79883B09E /* WorthSnapShared */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = WorthSnapShared;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 6CD86EB5FECCEE4BE3389E31 /* Project object */;
+}
