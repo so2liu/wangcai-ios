@@ -3,7 +3,6 @@ import WorthSnapShared
 
 struct SnapshotView: View {
     @EnvironmentObject private var store: AppStore
-    @State private var newMonth = WorthSnapEngine.currentMonth()
     @FocusState private var focusedEntryId: UUID?
 
     var body: some View {
@@ -11,17 +10,27 @@ struct SnapshotView: View {
             let snapshot = store.snapshot()
             Form {
                 Section("月份") {
-                    HStack {
-                        TextField("YYYY-MM", text: $store.selectedMonth)
-                            .textInputAutocapitalization(.never)
-                            .font(.body.monospacedDigit())
-                        Button {
-                            _ = store.snapshot(month: store.selectedMonth)
-                        } label: {
-                            Label("创建", systemImage: "calendar.badge.plus")
+                    Picker("月份", selection: $store.selectedMonth) {
+                        ForEach(store.sortedValidSnapshots) { snapshot in
+                            Text(snapshot.month).tag(snapshot.month)
                         }
-                        .buttonStyle(.borderless)
                     }
+                    .font(.body.monospacedDigit())
+
+                    HStack {
+                        Button {
+                            store.createAdjacentSnapshot(offset: -1)
+                        } label: {
+                            Label("上月", systemImage: "chevron.left")
+                        }
+                        Spacer()
+                        Button {
+                            store.createAdjacentSnapshot(offset: 1)
+                        } label: {
+                            Label("下月", systemImage: "chevron.right")
+                        }
+                    }
+                    .buttonStyle(.borderless)
                 }
                 if store.data.accounts.filter({ !$0.archived }).isEmpty {
                     Section {

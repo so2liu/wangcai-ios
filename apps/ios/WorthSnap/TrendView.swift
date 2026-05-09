@@ -9,12 +9,17 @@ struct TrendView: View {
         NavigationStack {
             List {
                 Section("趋势") {
-                    ForEach(store.data.snapshots.sorted(by: { $0.month > $1.month })) { snapshot in
+                    ForEach(store.sortedSnapshots) { snapshot in
                         let totals = WorthSnapEngine.totals(for: snapshot, in: store.data)
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
                                 Text(snapshot.month)
                                     .font(.headline)
+                                if !WorthSnapEngine.isValidMonth(snapshot.month) {
+                                    Text("异常")
+                                        .font(.caption)
+                                        .foregroundStyle(.orange)
+                                }
                                 Spacer()
                                 Text(AppFormatters.money(totals.netWorth, currency: snapshot.baseCurrency))
                             }
@@ -27,6 +32,10 @@ struct TrendView: View {
                             }
                             .font(.caption)
                         }
+                    }
+                    .onDelete { offsets in
+                        let snapshots = store.sortedSnapshots
+                        offsets.map { snapshots[$0] }.forEach(store.deleteSnapshot)
                     }
                 }
                 Section("类型占比") {

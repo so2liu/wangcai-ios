@@ -32,7 +32,7 @@ final class AppStore: ObservableObject {
             loadedData = WorthSnapEngine.seededData()
         }
         data = loadedData
-        selectedMonth = loadedData.snapshots.sorted(by: { $0.month < $1.month }).last?.month ?? WorthSnapEngine.currentMonth()
+        selectedMonth = loadedData.snapshots.filter { WorthSnapEngine.isValidMonth($0.month) }.sorted(by: { $0.month < $1.month }).last?.month ?? WorthSnapEngine.currentMonth()
     }
 
     func save() {
@@ -46,12 +46,45 @@ final class AppStore: ObservableObject {
 
     func snapshot(month: String? = nil) -> Snapshot {
         let target = month ?? selectedMonth
+        guard WorthSnapEngine.isValidMonth(target) else {
+            let fallback = data.snapshots.filter { WorthSnapEngine.isValidMonth($0.month) }.sorted(by: { $0.month < $1.month }).last?.month ?? WorthSnapEngine.currentMonth()
+            selectedMonth = fallback
+            return snapshot(month: fallback)
+        }
         if let existing = data.snapshots.first(where: { $0.month == target }) {
             return existing
         }
         let created = WorthSnapEngine.createSnapshot(month: target, in: &data)
         save()
         return created
+    }
+
+    var sortedSnapshots: [Snapshot] {
+        data.snapshots.sorted { $0.month > $1.month }
+    }
+
+    var sortedValidSnapshots: [Snapshot] {
+        sortedSnapshots.filter { WorthSnapEngine.isValidMonth($0.month) }
+    }
+
+    func createAdjacentSnapshot(offset: Int) {
+        let current = WorthSnapEngine.isValidMonth(selectedMonth) ? selectedMonth : WorthSnapEngine.currentMonth()
+        let target = offset < 0 ? WorthSnapEngine.previousMonth(current) : WorthSnapEngine.nextMonth(current)
+        guard let target else { return }
+        selectedMonth = target
+        _ = snapshot(month: target)
+    }
+
+    func deleteSnapshot(_ target: Snapshot) {
+        data.entries.removeAll { $0.snapshotId == target.id }
+        data.snapshots.removeAll { $0.id == target.id }
+        if selectedMonth == target.month {
+            selectedMonth = sortedValidSnapshots.first?.month ?? WorthSnapEngine.currentMonth()
+            if data.snapshots.isEmpty {
+                _ = snapshot(month: selectedMonth)
+            }
+        }
+        save()
     }
 
     func entries(for snapshot: Snapshot) -> [SnapshotEntry] {

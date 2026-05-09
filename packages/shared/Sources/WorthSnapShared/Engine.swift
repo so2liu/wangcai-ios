@@ -34,14 +34,38 @@ public enum WorthSnapEngine {
     public static func previousMonth(_ month: String) -> String? {
         let formatter = DateFormatter()
         formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyy-MM"
+        formatter.isLenient = false
         guard let date = formatter.date(from: month),
               let previous = formatter.calendar.date(byAdding: .month, value: -1, to: date) else { return nil }
         return formatter.string(from: previous)
     }
 
+    public static func nextMonth(_ month: String) -> String? {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM"
+        formatter.isLenient = false
+        guard let date = formatter.date(from: month),
+              let next = formatter.calendar.date(byAdding: .month, value: 1, to: date) else { return nil }
+        return formatter.string(from: next)
+    }
+
+    public static func isValidMonth(_ month: String) -> Bool {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM"
+        formatter.isLenient = false
+        guard let date = formatter.date(from: month) else { return false }
+        return formatter.string(from: date) == month
+    }
+
     @discardableResult
     public static func createSnapshot(month: String, in data: inout WorthSnapData) -> Snapshot {
+        precondition(isValidMonth(month), "Snapshot month must use YYYY-MM format.")
         if let existing = data.snapshots.first(where: { $0.month == month }) {
             return existing
         }
