@@ -13,12 +13,19 @@ struct TrendView: View {
                         let totals = WorthSnapEngine.totals(for: snapshot, in: store.data)
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
-                                Text(snapshot.month)
-                                    .font(.headline)
-                                if !WorthSnapEngine.isValidMonth(snapshot.month) {
-                                    Text("异常")
+                                VStack(alignment: .leading, spacing: 2) {
+                                    HStack {
+                                        Text(snapshot.month)
+                                            .font(.headline)
+                                        if !WorthSnapEngine.isValidMonth(snapshot.month) {
+                                            Text("异常")
+                                                .font(.caption)
+                                                .foregroundStyle(.orange)
+                                        }
+                                    }
+                                    Text("\(snapshot.month) · \(AppFormatters.snapshotRecordDate(snapshot.snapshotDate))")
                                         .font(.caption)
-                                        .foregroundStyle(.orange)
+                                        .foregroundStyle(.secondary)
                                 }
                                 Spacer()
                                 Text(AppFormatters.money(totals.netWorth, currency: snapshot.baseCurrency))
