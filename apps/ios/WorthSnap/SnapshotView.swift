@@ -18,6 +18,13 @@ struct SnapshotView: View {
                     .font(.body.monospacedDigit())
 
                     HStack {
+                        Text("记录日期")
+                        Spacer()
+                        Text(AppFormatters.snapshotRecordDate(snapshot.snapshotDate))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    HStack {
                         Button {
                             store.createAdjacentSnapshot(offset: -1)
                         } label: {
@@ -57,12 +64,7 @@ struct SnapshotView: View {
                 Section("整月备注") {
                     TextField("补充说明", text: Binding(
                         get: { snapshot.note },
-                        set: { value in
-                            if let index = store.data.snapshots.firstIndex(where: { $0.id == snapshot.id }) {
-                                store.data.snapshots[index].note = value
-                                store.save()
-                            }
-                        }
+                        set: { store.updateSnapshotNote(snapshotId: snapshot.id, note: $0) }
                     ), axis: .vertical)
                     .keyboardDismissToolbar()
                 }

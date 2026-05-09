@@ -49,6 +49,13 @@ enum AppFormatters {
         return String(format: "%.1f%%", number * 100)
     }
 
+    static func snapshotRecordDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_Hans_CN")
+        formatter.dateFormat = "M 月 d 日记录"
+        return formatter.string(from: date)
+    }
+
     private static func formatted(_ value: Double, using formatter: NumberFormatter) -> String {
         formatter.string(from: NSNumber(value: value)) ?? String(format: "%.1f", value)
     }

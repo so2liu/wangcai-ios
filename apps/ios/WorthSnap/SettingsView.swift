@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 struct SettingsView: View {
     @EnvironmentObject private var store: AppStore
     @State private var exportText = ""
+    @State private var notificationMessage: String?
 
     var body: some View {
         List {
@@ -27,6 +28,47 @@ struct SettingsView: View {
             Section("同步") {
                 Label("本地优先已启用", systemImage: "internaldrive")
                 Label("iCloud 私有同步预留", systemImage: "icloud")
+                    .foregroundStyle(.secondary)
+            }
+            Section("快照提醒") {
+                Toggle("每月提醒", isOn: Binding(
+                    get: { store.data.monthlyReminder.isEnabled },
+                    set: { enabled in
+                        Task {
+                            let scheduled = await store.setMonthlyReminderEnabled(enabled)
+                            if enabled && !scheduled {
+                                notificationMessage = "已保存配置，但因无通知权限不会触发提醒，可在系统设置中开启"
+                            }
+                        }
+                    }
+                ))
+
+                Picker("日期", selection: Binding(
+                    get: { store.data.monthlyReminder.day.rawStorageValue },
+                    set: { value in
+                        if value == "last" {
+                            store.updateMonthlyReminderDay(.lastDay)
+                        } else if let day = Int(value.replacingOccurrences(of: "day:", with: "")) {
+                            store.updateMonthlyReminderDay(.day(day))
+                        }
+                    }
+                )) {
+                    ForEach(1...28, id: \.self) { day in
+                        Text("\(day) 日").tag("day:\(day)")
+                    }
+                    Text("最后一天").tag("last")
+                }
+
+                DatePicker("时刻", selection: Binding(
+                    get: { reminderTimeDate },
+                    set: { date in
+                        let comps = Calendar.current.dateComponents([.hour, .minute], from: date)
+                        store.updateMonthlyReminderTime(hour: comps.hour ?? 20, minute: comps.minute ?? 0)
+                    }
+                ), displayedComponents: .hourAndMinute)
+
+                Text("通知会根据当前完成状态只注册下一次提醒。")
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
             }
             Section("导出") {
@@ -57,5 +99,20 @@ struct SettingsView: View {
             }
         }
         .navigationTitle("设置")
+        .alert("通知权限未开启", isPresented: Binding(
+            get: { notificationMessage != nil },
+            set: { if !$0 { notificationMessage = nil } }
+        )) {
+            Button("知道了", role: .cancel) {}
+        } message: {
+            Text(notificationMessage ?? "")
+        }
+    }
+
+    private var reminderTimeDate: Date {
+        var comps = Calendar.current.dateComponents([.year, .month, .day], from: Date())
+        comps.hour = store.data.monthlyReminder.hour
+        comps.minute = store.data.monthlyReminder.minute
+        return Calendar.current.date(from: comps) ?? Date()
     }
 }

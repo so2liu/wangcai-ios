@@ -9,7 +9,7 @@ public enum WorthSnapEngine {
         let types = assetTypeNames.map { AccountType(name: $0, direction: .asset, isSystem: true) }
             + liabilityTypeNames.map { AccountType(name: $0, direction: .liability, isSystem: true) }
         var data = WorthSnapData(ledger: ledger, accountTypes: types)
-        createSnapshot(month: currentMonth(), in: &data)
+        createSnapshot(month: currentMonth(date: now), now: now, in: &data)
         return data
     }
 
@@ -64,7 +64,7 @@ public enum WorthSnapEngine {
     }
 
     @discardableResult
-    public static func createSnapshot(month: String, in data: inout WorthSnapData) -> Snapshot {
+    public static func createSnapshot(month: String, now: Date = Date(), in data: inout WorthSnapData) -> Snapshot {
         precondition(isValidMonth(month), "Snapshot month must use YYYY-MM format.")
         if let existing = data.snapshots.first(where: { $0.month == month }) {
             return existing
@@ -72,16 +72,16 @@ public enum WorthSnapEngine {
         let previous = previousMonth(month).flatMap { previousMonth in
             data.snapshots.first(where: { $0.month == previousMonth })
         }
-        var snapshot = Snapshot(ledgerId: data.ledger.id, month: month, baseCurrency: data.ledger.baseCurrency)
+        var snapshot = Snapshot(ledgerId: data.ledger.id, month: month, baseCurrency: data.ledger.baseCurrency, snapshotDate: now, createdAt: now, updatedAt: now)
         data.snapshots.append(snapshot)
         let previousEntries = data.entries.filter { $0.snapshotId == previous?.id }
         for account in data.accounts where !account.archived {
             let previousEntry = previousEntries.first { $0.accountId == account.id }
             let amount = previousEntry?.amount ?? 0
             let rate = snapshot.exchangeRates[account.currency] ?? 1
-            data.entries.append(SnapshotEntry(snapshotId: snapshot.id, accountId: account.id, amount: amount, currency: account.currency, exchangeRate: rate, confirmed: false))
+            data.entries.append(SnapshotEntry(snapshotId: snapshot.id, accountId: account.id, amount: amount, currency: account.currency, exchangeRate: rate, confirmed: false, updatedAt: now))
         }
-        updateCompletion(snapshotId: snapshot.id, in: &data)
+        updateCompletion(snapshotId: snapshot.id, now: now, updateSnapshotDate: false, in: &data)
         snapshot = data.snapshots.first { $0.id == snapshot.id }!
         return snapshot
     }
@@ -92,18 +92,18 @@ public enum WorthSnapEngine {
             let isCurrentOrFuture = snapshot.month >= currentMonth()
             let rate = snapshot.exchangeRates[account.currency] ?? 1
             data.entries.append(SnapshotEntry(snapshotId: snapshot.id, accountId: account.id, amount: 0, currency: account.currency, exchangeRate: rate, confirmed: !isCurrentOrFuture))
-            updateCompletion(snapshotId: snapshot.id, in: &data)
+            updateCompletion(snapshotId: snapshot.id, updateSnapshotDate: false, in: &data)
         }
     }
 
-    public static func updateEntry(entryId: UUID, amount: Decimal, confirmed: Bool? = nil, note: String? = nil, in data: inout WorthSnapData) {
+    public static func updateEntry(entryId: UUID, amount: Decimal, confirmed: Bool? = nil, note: String? = nil, now: Date = Date(), in data: inout WorthSnapData) {
         guard let index = data.entries.firstIndex(where: { $0.id == entryId }) else { return }
         data.entries[index].amount = amount
         data.entries[index].convertedAmount = amount * data.entries[index].exchangeRate
-        data.entries[index].updatedAt = Date()
+        data.entries[index].updatedAt = now
         if let confirmed { data.entries[index].confirmed = confirmed }
         if let note { data.entries[index].note = note }
-        updateCompletion(snapshotId: data.entries[index].snapshotId, in: &data)
+        updateCompletion(snapshotId: data.entries[index].snapshotId, now: now, in: &data)
     }
 
     public static func setExchangeRate(month: String, currency: String, rate: Decimal, in data: inout WorthSnapData) {
@@ -117,12 +117,18 @@ public enum WorthSnapEngine {
         }
     }
 
-    public static func updateCompletion(snapshotId: UUID, in data: inout WorthSnapData) {
+    public static func updateCompletion(snapshotId: UUID, now: Date = Date(), updateSnapshotDate: Bool = true, in data: inout WorthSnapData) {
         guard let snapshotIndex = data.snapshots.firstIndex(where: { $0.id == snapshotId }) else { return }
         let activeAccountIds = Set(data.accounts.filter { !$0.archived }.map(\.id))
         let related = data.entries.filter { $0.snapshotId == snapshotId && activeAccountIds.contains($0.accountId) }
         data.snapshots[snapshotIndex].completed = !related.isEmpty && related.allSatisfy(\.confirmed)
-        data.snapshots[snapshotIndex].updatedAt = Date()
+        if data.snapshots[snapshotIndex].completed {
+            data.monthlyReminder.lastCompletedMonth = data.snapshots[snapshotIndex].month
+        }
+        if updateSnapshotDate {
+            data.snapshots[snapshotIndex].snapshotDate = now
+        }
+        data.snapshots[snapshotIndex].updatedAt = now
     }
 
     public static func totals(for snapshot: Snapshot, in data: WorthSnapData) -> SnapshotTotals {

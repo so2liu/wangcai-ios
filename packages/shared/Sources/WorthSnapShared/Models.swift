@@ -106,10 +106,11 @@ public struct Snapshot: Codable, Equatable, Identifiable, Sendable {
     public var exchangeRateSource: String
     public var note: String
     public var completed: Bool
+    public var snapshotDate: Date
     public var createdAt: Date
     public var updatedAt: Date
 
-    public init(id: UUID = UUID(), ledgerId: UUID, month: String, baseCurrency: String = "CNY", exchangeRates: [String: Decimal] = ["CNY": 1], exchangeRateSource: String = "本地缓存", note: String = "", completed: Bool = false, createdAt: Date = Date(), updatedAt: Date = Date()) {
+    public init(id: UUID = UUID(), ledgerId: UUID, month: String, baseCurrency: String = "CNY", exchangeRates: [String: Decimal] = ["CNY": 1], exchangeRateSource: String = "本地缓存", note: String = "", completed: Bool = false, snapshotDate: Date = Date(), createdAt: Date = Date(), updatedAt: Date = Date()) {
         self.id = id
         self.ledgerId = ledgerId
         self.month = month
@@ -118,8 +119,52 @@ public struct Snapshot: Codable, Equatable, Identifiable, Sendable {
         self.exchangeRateSource = exchangeRateSource
         self.note = note
         self.completed = completed
+        self.snapshotDate = snapshotDate
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case ledgerId
+        case month
+        case baseCurrency
+        case exchangeRates
+        case exchangeRateSource
+        case note
+        case completed
+        case snapshotDate
+        case createdAt
+        case updatedAt
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        ledgerId = try container.decode(UUID.self, forKey: .ledgerId)
+        month = try container.decode(String.self, forKey: .month)
+        baseCurrency = try container.decode(String.self, forKey: .baseCurrency)
+        exchangeRates = try container.decode([String: Decimal].self, forKey: .exchangeRates)
+        exchangeRateSource = try container.decode(String.self, forKey: .exchangeRateSource)
+        note = try container.decode(String.self, forKey: .note)
+        completed = try container.decode(Bool.self, forKey: .completed)
+        let migratedMonthStart = Snapshot.monthStartDate(month) ?? Date(timeIntervalSince1970: 0)
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? migratedMonthStart
+        updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
+        snapshotDate = try container.decodeIfPresent(Date.self, forKey: .snapshotDate) ?? createdAt
+    }
+
+    private static func monthStartDate(_ month: String) -> Date? {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyy-MM"
+        formatter.isLenient = false
+        guard let date = formatter.date(from: month), formatter.string(from: date) == month else {
+            return nil
+        }
+        return date
     }
 }
 
@@ -156,13 +201,42 @@ public struct WorthSnapData: Codable, Equatable, Sendable {
     public var accounts: [Account]
     public var snapshots: [Snapshot]
     public var entries: [SnapshotEntry]
+    public var monthlyReminder: MonthlyReminderConfig
 
-    public init(ledger: Ledger = Ledger(), accountTypes: [AccountType] = [], tags: [Tag] = [], accounts: [Account] = [], snapshots: [Snapshot] = [], entries: [SnapshotEntry] = []) {
+    public init(ledger: Ledger = Ledger(), accountTypes: [AccountType] = [], tags: [Tag] = [], accounts: [Account] = [], snapshots: [Snapshot] = [], entries: [SnapshotEntry] = [], monthlyReminder: MonthlyReminderConfig = MonthlyReminderConfig()) {
         self.ledger = ledger
         self.accountTypes = accountTypes
         self.tags = tags
         self.accounts = accounts
         self.snapshots = snapshots
         self.entries = entries
+        self.monthlyReminder = monthlyReminder
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case ledger
+        case accountTypes
+        case tags
+        case accounts
+        case snapshots
+        case entries
+        case monthlyReminder
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        ledger = try container.decode(Ledger.self, forKey: .ledger)
+        accountTypes = try container.decode([AccountType].self, forKey: .accountTypes)
+        tags = try container.decode([Tag].self, forKey: .tags)
+        accounts = try container.decode([Account].self, forKey: .accounts)
+        snapshots = try container.decode([Snapshot].self, forKey: .snapshots)
+        entries = try container.decode([SnapshotEntry].self, forKey: .entries)
+        monthlyReminder = try container.decodeIfPresent(MonthlyReminderConfig.self, forKey: .monthlyReminder) ?? MonthlyReminderConfig()
+        if monthlyReminder.lastCompletedMonth == nil {
+            let currentMonth = WorthSnapEngine.currentMonth()
+            if snapshots.contains(where: { $0.month == currentMonth && $0.completed }) {
+                monthlyReminder.lastCompletedMonth = currentMonth
+            }
+        }
     }
 }

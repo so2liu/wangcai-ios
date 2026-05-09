@@ -9,7 +9,7 @@ public enum WorthSnapExporter {
     }
 
     public static func summaryCSV(data: WorthSnapData) -> String {
-        var rows = ["month,base_currency,total_assets,total_liabilities,net_worth,asset_change_amount,asset_change_percent,net_worth_change_amount,net_worth_change_percent,completed,note,updated_at"]
+        var rows = ["month,snapshot_date,base_currency,total_assets,total_liabilities,net_worth,asset_change_amount,asset_change_percent,net_worth_change_amount,net_worth_change_percent,completed,note,updated_at"]
         let snapshots = data.snapshots.sorted(by: { $0.month < $1.month })
         for (index, snapshot) in snapshots.enumerated() {
             let totals = WorthSnapEngine.totals(for: snapshot, in: data)
@@ -20,6 +20,7 @@ public enum WorthSnapExporter {
             let netWorthPercent = previousTotals.flatMap { percent(change: netWorthChange, previous: $0.netWorth) } ?? 0
             rows.append([
                 snapshot.month,
+                ISO8601DateFormatter().string(from: snapshot.snapshotDate),
                 snapshot.baseCurrency,
                 totals.totalAssets.description,
                 totals.totalLiabilities.description,
