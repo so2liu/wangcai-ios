@@ -32,6 +32,7 @@ struct SnapshotView: View {
                     }
                     .buttonStyle(.borderless)
                 }
+                .wcRow()
                 if store.data.accounts.filter({ !$0.archived }).isEmpty {
                     Section {
                         ContentUnavailableView(
@@ -40,6 +41,7 @@ struct SnapshotView: View {
                             description: Text("先在账户页添加需要每月确认的资产或负债账户。")
                         )
                     }
+                    .wcRow()
                 } else {
                     ForEach(Direction.allCases) { direction in
                         let rows = store.entries(for: snapshot).filter { entry in
@@ -51,6 +53,7 @@ struct SnapshotView: View {
                                     SnapshotEntryRow(entry: entry, focusedEntryId: $focusedEntryId)
                                 }
                             }
+                            .wcRow()
                         }
                     }
                 }
@@ -66,7 +69,10 @@ struct SnapshotView: View {
                     ), axis: .vertical)
                     .keyboardDismissToolbar()
                 }
+                .wcRow()
             }
+            .wcScreen()
+            .tint(WCTheme.goldDeep)
             .navigationTitle("快照")
             .scrollDismissesKeyboard(.interactively)
             .toolbar {
@@ -107,13 +113,14 @@ private struct SnapshotEntryRow: View {
                     VStack(alignment: .leading) {
                         Text(account.name)
                             .font(.body)
+                            .foregroundStyle(WCTheme.ink)
                         Text("\(store.typeName(id: account.typeId)) · \(entry.currency)")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(WCTheme.inkTertiary)
                     }
                     Spacer()
                     Image(systemName: entry.confirmed ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(entry.confirmed ? .green : .secondary)
+                        .foregroundStyle(entry.confirmed ? WCTheme.up : WCTheme.inkFaint)
                 }
                 HStack {
                     TextField(AppFormatters.inputPlaceholder(for: entry.amount, currency: entry.currency), text: $amountText)

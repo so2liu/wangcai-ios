@@ -11,34 +11,41 @@ struct AccountsView: View {
         NavigationStack {
             List {
                 Toggle("显示归档账户", isOn: $showArchived)
+                    .wcRow()
                 ForEach(store.data.accounts.filter { showArchived || !$0.archived }.sorted(by: { $0.sortOrder < $1.sortOrder })) { account in
-                    HStack {
+                    HStack(spacing: 12) {
+                        Circle()
+                            .fill(account.direction == .asset ? WCTheme.up : WCTheme.down)
+                            .frame(width: 8, height: 8)
                         VStack(alignment: .leading, spacing: 4) {
                             Text(account.name)
                                 .font(.headline)
+                                .foregroundStyle(WCTheme.ink)
                             Text("\(account.direction.title) · \(store.typeName(id: account.typeId)) · \(account.currency) · \(account.ownership.title)")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(WCTheme.inkTertiary)
                         }
                         Spacer()
                         if account.archived {
                             Text("已归档")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(WCTheme.inkFaint)
                         }
                     }
                     .contentShape(Rectangle())
                     .onTapGesture {
                         editingAccount = account
                     }
+                    .wcRow()
                     .swipeActions {
                         Button(account.archived ? "恢复" : "归档") {
                             store.toggleArchive(account: account)
                         }
-                        .tint(account.archived ? .green : .orange)
+                        .tint(account.archived ? WCTheme.up : WCTheme.gold)
                     }
                 }
             }
+            .wcScreen()
             .navigationTitle("账户")
             .toolbar {
                 Button {

@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		1F0EC0DD2AA3C33317B4E70F /* AccountsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F92A37C21BF96AA7C9673A31 /* AccountsView.swift */; };
 		1F5CA1C259EADC86DB4BBE9C /* OverviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB2CD2DB5516DFBDD64F9A3D /* OverviewView.swift */; };
+		FACE0001000000000000FACE /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = FACE0002000000000000FACE /* Theme.swift */; };
 		1F9C0AB019A2260C9C8FD129 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2B5AE268C74CA2A94469DB8 /* SettingsView.swift */; };
 		32D66CE21EAAFFFFC2FDD532 /* TrendView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B7C25F044A065F46AAB572A /* TrendView.swift */; };
 		53C5FDBE5A14B65754EB3614 /* WorthSnapShared in Frameworks */ = {isa = PBXBuildFile; productRef = 6F253E8B8E2929D79883B09E /* WorthSnapShared */; };
@@ -17,6 +18,7 @@
 		9FE5C80147833105C17ED89C /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D18ABCAA10A6DBA5B2766F79 /* RootView.swift */; };
 		C6079401810B4287A69E69F7 /* KeyboardDismissModifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEE62918172DD635D45365FF /* KeyboardDismissModifier.swift */; };
 		D1D41FAB7AC35970EE67C0A3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F8660AEDA52799C3E1A9BDCD /* Assets.xcassets */; };
+		FACE0003000000000000FACE /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = FACE0004000000000000FACE /* PrivacyInfo.xcprivacy */; };
 		D796FC1E2A385048541910B8 /* Formatters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 341D8FAB9EADFDAD97692AF0 /* Formatters.swift */; };
 /* End PBXBuildFile section */
 
@@ -30,8 +32,10 @@
 		AEE62918172DD635D45365FF /* KeyboardDismissModifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardDismissModifier.swift; sourceTree = "<group>"; };
 		D18ABCAA10A6DBA5B2766F79 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		DB2CD2DB5516DFBDD64F9A3D /* OverviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverviewView.swift; sourceTree = "<group>"; };
+		FACE0002000000000000FACE /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		E0E8D0910FDF88D4C1DED08F /* WorthSnapApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorthSnapApp.swift; sourceTree = "<group>"; };
 		F8660AEDA52799C3E1A9BDCD /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		FACE0004000000000000FACE /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		F92A37C21BF96AA7C9673A31 /* AccountsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -52,9 +56,11 @@
 			children = (
 				F92A37C21BF96AA7C9673A31 /* AccountsView.swift */,
 				F8660AEDA52799C3E1A9BDCD /* Assets.xcassets */,
+				FACE0004000000000000FACE /* PrivacyInfo.xcprivacy */,
 				341D8FAB9EADFDAD97692AF0 /* Formatters.swift */,
 				AEE62918172DD635D45365FF /* KeyboardDismissModifier.swift */,
 				DB2CD2DB5516DFBDD64F9A3D /* OverviewView.swift */,
+				FACE0002000000000000FACE /* Theme.swift */,
 				D18ABCAA10A6DBA5B2766F79 /* RootView.swift */,
 				A2B5AE268C74CA2A94469DB8 /* SettingsView.swift */,
 				3AF40CA60690E568C9D2C834 /* SnapshotView.swift */,
@@ -154,6 +160,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				D1D41FAB7AC35970EE67C0A3 /* Assets.xcassets in Resources */,
+				FACE0003000000000000FACE /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -168,6 +175,7 @@
 				D796FC1E2A385048541910B8 /* Formatters.swift in Sources */,
 				C6079401810B4287A69E69F7 /* KeyboardDismissModifier.swift in Sources */,
 				1F5CA1C259EADC86DB4BBE9C /* OverviewView.swift in Sources */,
+				FACE0001000000000000FACE /* Theme.swift in Sources */,
 				9FE5C80147833105C17ED89C /* RootView.swift in Sources */,
 				1F9C0AB019A2260C9C8FD129 /* SettingsView.swift in Sources */,
 				6BF8B77517C54E2AC224AA85 /* SnapshotView.swift in Sources */,

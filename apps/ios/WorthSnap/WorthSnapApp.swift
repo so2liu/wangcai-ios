@@ -17,30 +17,101 @@ struct WorthSnapApp: App {
 final class AppStore: ObservableObject {
     @Published var data: WorthSnapData
     @Published var selectedMonth: String
+    /// 数据文件存在但无法读取时为 true：App 进入「安全模式」——展示警告、**禁止保存**，
+    /// 以免用一份空数据覆盖掉用户磁盘上仍然完好的原文件。
+    @Published private(set) var loadFailed: Bool = false
+    /// 安全模式下，损坏原文件被复制到的备份路径（供 UI 告知用户）。
+    @Published private(set) var corruptBackupURL: URL?
 
     private let url: URL
 
     init() {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         url = documents.appendingPathComponent("worthsnap-data.json")
-        let loadedData: WorthSnapData
-        if let stored = try? Data(contentsOf: url) {
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            loadedData = (try? decoder.decode(WorthSnapData.self, from: stored)) ?? WorthSnapEngine.seededData()
-        } else {
-            loadedData = WorthSnapEngine.seededData()
+
+        guard let stored = try? Data(contentsOf: url) else {
+            // 全新安装：没有文件，正常初始化示例数据。
+            let seeded = WorthSnapEngine.seededData()
+            data = seeded
+            selectedMonth = AppStore.latestMonth(in: seeded)
+            return
         }
-        data = loadedData
-        selectedMonth = loadedData.snapshots.filter { WorthSnapEngine.isValidMonth($0.month) }.sorted(by: { $0.month < $1.month }).last?.month ?? WorthSnapEngine.currentMonth()
+
+        do {
+            let decoded = try WorthSnapStore.decode(stored)
+            data = decoded
+            selectedMonth = AppStore.latestMonth(in: decoded)
+        } catch {
+            // 关键：解码失败绝不静默覆盖。备份损坏文件、进入安全模式、禁止保存。
+            let backup = AppStore.backupCorruptedFile(at: url)
+            let placeholder = WorthSnapEngine.seededData()
+            data = placeholder
+            selectedMonth = AppStore.latestMonth(in: placeholder)
+            loadFailed = true
+            corruptBackupURL = backup
+            NSLog("WorthSnap load failed, entered safe mode: \(error). Backup: \(backup?.lastPathComponent ?? "none")")
+        }
+    }
+
+    private static func latestMonth(in data: WorthSnapData) -> String {
+        data.snapshots
+            .filter { WorthSnapEngine.isValidMonth($0.month) }
+            .sorted { $0.month < $1.month }
+            .last?.month ?? WorthSnapEngine.currentMonth()
     }
 
     func save() {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        if let encoded = try? encoder.encode(data) {
-            try? encoded.write(to: url, options: .atomic)
+        // 安全模式下绝不写盘，保护磁盘上仍然完好的原文件。
+        guard !loadFailed else { return }
+        do {
+            let encoded = try WorthSnapStore.encode(data)
+            try AppStore.writeAtomically(encoded, to: url)
+        } catch {
+            // 写失败不致命：保留磁盘上的旧版本，下次操作会再次尝试。
+            NSLog("WorthSnap save failed: \(error)")
+        }
+    }
+
+    /// 用一份外部数据（如从 JSON 备份恢复）整体替换当前数据。
+    /// 成功后退出安全模式并立即落盘——这也是安全模式用户找回数据的出口。
+    func replaceAll(with newData: WorthSnapData) {
+        data = newData
+        loadFailed = false
+        corruptBackupURL = nil
+        selectedMonth = AppStore.latestMonth(in: newData)
+        save()
+    }
+
+    /// 从备份文件原始字节恢复：用安全解码校验后替换。失败抛错，绝不破坏现有数据。
+    func restore(from raw: Data) throws {
+        let decoded = try WorthSnapStore.decode(raw)
+        replaceAll(with: decoded)
+    }
+
+    /// 原子写入，并在覆盖前把现有文件保留成 `.bak`，作为最近一次的可回滚副本。
+    private static func writeAtomically(_ payload: Data, to url: URL) throws {
+        let fm = FileManager.default
+        if fm.fileExists(atPath: url.path) {
+            let backup = url.appendingPathExtension("bak")
+            try? fm.removeItem(at: backup)
+            try? fm.copyItem(at: url, to: backup)
+        }
+        try payload.write(to: url, options: .atomic)
+    }
+
+    /// 把无法解析的文件复制一份留证，**不删除、不覆盖**原文件。
+    /// 用固定名并保留首份：重启多次不会堆积备份，也不会覆盖最初那次损坏的原始副本。
+    @discardableResult
+    private static func backupCorruptedFile(at url: URL) -> URL? {
+        let fm = FileManager.default
+        let dest = url.deletingPathExtension().appendingPathExtension("corrupt.json")
+        if fm.fileExists(atPath: dest.path) { return dest }
+        do {
+            try fm.copyItem(at: url, to: dest)
+            return dest
+        } catch {
+            NSLog("WorthSnap corrupt-backup failed: \(error)")
+            return nil
         }
     }
 
