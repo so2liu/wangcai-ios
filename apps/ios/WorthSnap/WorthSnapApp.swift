@@ -1,5 +1,6 @@
 import SwiftUI
 import CloudKit
+import Combine
 import WorthSnapShared
 
 @main
@@ -63,6 +64,7 @@ final class AppStore: ObservableObject {
 
     /// iCloud 家庭共享协调器。懒加载：仅在用户开启同步后创建。
     private var _cloud: Any?
+    private var cloudCancellable: AnyCancellable?
     @available(iOS 17.0, *)
     var cloud: CloudSyncCoordinator {
         if let existing = _cloud as? CloudSyncCoordinator { return existing }
@@ -71,6 +73,11 @@ final class AppStore: ObservableObject {
             applyRemote: { [weak self] records, deletions in self?.applyRemoteRecords(records, deletions: deletions) },
             isSafeMode: { [weak self] in self?.loadFailed ?? true }
         )
+        // 把协调器的 @Published（enabled/status）变更转发给 AppStore，
+        // 否则只观察 AppStore 的 SettingsView 不会随异步 enable/disable 刷新开关与状态。
+        cloudCancellable = coordinator.objectWillChange.sink { [weak self] _ in
+            self?.objectWillChange.send()
+        }
         _cloud = coordinator
         return coordinator
     }
