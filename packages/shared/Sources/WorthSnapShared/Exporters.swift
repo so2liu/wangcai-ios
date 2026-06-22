@@ -41,7 +41,10 @@ public enum WorthSnapExporter {
         let typesById = Dictionary(uniqueKeysWithValues: data.accountTypes.map { ($0.id, $0) })
         let tagsById = Dictionary(uniqueKeysWithValues: data.tags.map { ($0.id, $0) })
         let snapshotsById = Dictionary(uniqueKeysWithValues: data.snapshots.map { ($0.id, $0) })
-        var rows = ["month,account_name,direction,type,ownership,tags,currency,amount,exchange_rate,base_currency,converted_amount,confirmed,note,updated_at"]
+        let membersById = Dictionary(uniqueKeysWithValues: data.members.map { ($0.id, $0) })
+        func ownerLabel(_ id: UUID?) -> String { id.flatMap { membersById[$0]?.name } ?? "共同" }
+        func responsibleLabel(_ id: UUID?) -> String { id.flatMap { membersById[$0]?.name } ?? "" }
+        var rows = ["month,account_name,direction,type,owner,responsible,tags,currency,amount,exchange_rate,base_currency,converted_amount,confirmed,note,updated_at"]
         for entry in data.entries {
             guard let account = accountsById[entry.accountId], let snapshot = snapshotsById[entry.snapshotId] else { continue }
             let tagNames = account.tagIds.compactMap { tagsById[$0]?.name }.joined(separator: "|")
@@ -50,7 +53,8 @@ public enum WorthSnapExporter {
                 escape(account.name),
                 account.direction.rawValue,
                 escape(typesById[account.typeId]?.name ?? ""),
-                account.ownership.rawValue,
+                escape(ownerLabel(account.ownerMemberId)),
+                escape(responsibleLabel(account.responsibleMemberId)),
                 escape(tagNames),
                 entry.currency,
                 entry.amount.description,
@@ -68,7 +72,10 @@ public enum WorthSnapExporter {
     public static func accountsCSV(data: WorthSnapData) -> String {
         let typesById = Dictionary(uniqueKeysWithValues: data.accountTypes.map { ($0.id, $0) })
         let tagsById = Dictionary(uniqueKeysWithValues: data.tags.map { ($0.id, $0) })
-        var rows = ["account_name,direction,type,currency,ownership,tags,sort_order,archived,created_at,updated_at"]
+        let membersById = Dictionary(uniqueKeysWithValues: data.members.map { ($0.id, $0) })
+        func ownerLabel(_ id: UUID?) -> String { id.flatMap { membersById[$0]?.name } ?? "共同" }
+        func responsibleLabel(_ id: UUID?) -> String { id.flatMap { membersById[$0]?.name } ?? "" }
+        var rows = ["account_name,direction,type,currency,owner,responsible,tags,sort_order,archived,created_at,updated_at"]
         for account in data.accounts.sorted(by: { $0.sortOrder < $1.sortOrder }) {
             let tagNames = account.tagIds.compactMap { tagsById[$0]?.name }.joined(separator: "|")
             rows.append([
@@ -76,7 +83,8 @@ public enum WorthSnapExporter {
                 account.direction.rawValue,
                 escape(typesById[account.typeId]?.name ?? ""),
                 account.currency,
-                account.ownership.rawValue,
+                escape(ownerLabel(account.ownerMemberId)),
+                escape(responsibleLabel(account.responsibleMemberId)),
                 escape(tagNames),
                 String(account.sortOrder),
                 account.archived ? "true" : "false",
