@@ -4,11 +4,15 @@ public enum WorthSnapEngine {
     public static let assetTypeNames = ["银行存款", "现金", "股票/证券", "基金", "互联网钱包", "公积金/养老金", "其他资产"]
     public static let liabilityTypeNames = ["信用卡", "房贷", "消费贷", "其他负债"]
 
+    /// 全新安装时默认的本机成员名。加入家庭后可改名。
+    public static let defaultMemberName = "我"
+
     public static func seededData(now: Date = Date()) -> WorthSnapData {
         let ledger = Ledger(createdAt: now, updatedAt: now)
+        let me = Member(name: defaultMemberName, createdAt: now, updatedAt: now)
         let types = assetTypeNames.map { AccountType(name: $0, direction: .asset, isSystem: true) }
             + liabilityTypeNames.map { AccountType(name: $0, direction: .liability, isSystem: true) }
-        var data = WorthSnapData(ledger: ledger, accountTypes: types)
+        var data = WorthSnapData(ledger: ledger, members: [me], currentMemberId: me.id, accountTypes: types)
         createSnapshot(month: currentMonth(), in: &data)
         return data
     }
@@ -30,23 +34,28 @@ public enum WorthSnapEngine {
     /// 用于截图、onboarding 预览与设计对比；不用于真实用户首屏。
     public static func demoData(now: Date = Date()) -> WorthSnapData {
         var data = seededData(now: now)
+        // 演示「夫妻两人」：本机成员（我）+ 伴侣。
+        let me = data.currentMemberId
+        let partner = Member(name: "TA", colorHex: "E08F6B", createdAt: now, updatedAt: now)
+        data.members.append(partner)
         func type(_ name: String) -> AccountType { data.accountTypes.first { $0.name == name }! }
 
-        let specs: [(name: String, type: String, ownership: Ownership)] = [
-            ("工资卡", "银行存款", .me),
-            ("家庭基金", "基金", .shared),
-            ("股票账户", "股票/证券", .me),
-            ("自住房产", "其他资产", .shared),
-            ("微信钱包", "互联网钱包", .me),
-            ("信用卡", "信用卡", .me),
-            ("房贷", "房贷", .shared)
+        // ownerMemberId 为 nil 表示共同财产。
+        let specs: [(name: String, type: String, owner: UUID?)] = [
+            ("工资卡", "银行存款", me),
+            ("家庭基金", "基金", nil),
+            ("股票账户", "股票/证券", me),
+            ("自住房产", "其他资产", nil),
+            ("微信钱包", "互联网钱包", partner.id),
+            ("信用卡", "信用卡", partner.id),
+            ("房贷", "房贷", nil)
         ]
         for (index, spec) in specs.enumerated() {
             let accountType = type(spec.type)
             addAccount(
                 Account(ledgerId: data.ledger.id, name: spec.name, direction: accountType.direction,
-                        typeId: accountType.id, ownership: spec.ownership, sortOrder: index,
-                        createdAt: now, updatedAt: now),
+                        typeId: accountType.id, ownerMemberId: spec.owner, responsibleMemberId: spec.owner,
+                        sortOrder: index, createdAt: now, updatedAt: now),
                 to: &data
             )
         }
@@ -194,6 +203,42 @@ public enum WorthSnapEngine {
             }
         }
         return SnapshotTotals(totalAssets: assets, totalLiabilities: liabilities, netWorth: assets - liabilities)
+    }
+
+    /// 按「我的 / TA的 / 共同」三栏聚合某月的资产负债净值。
+    /// 视角由 `data.currentMemberId` 决定：家庭净资产 = 三栏净值之和。
+    public static func totals(by view: OwnershipView, for snapshot: Snapshot, in data: WorthSnapData) -> SnapshotTotals {
+        let accountsById = Dictionary(uniqueKeysWithValues: data.accounts.map { ($0.id, $0) })
+        var assets: Decimal = 0
+        var liabilities: Decimal = 0
+        for entry in data.entries where entry.snapshotId == snapshot.id {
+            guard let account = accountsById[entry.accountId], data.ownershipView(of: account) == view else { continue }
+            switch account.direction {
+            case .asset: assets += entry.convertedAmount
+            case .liability: liabilities += entry.convertedAmount
+            }
+        }
+        return SnapshotTotals(totalAssets: assets, totalLiabilities: liabilities, netWorth: assets - liabilities)
+    }
+
+    // MARK: - 成员
+
+    public static func addMember(name: String, colorHex: String = "C8A24B", icloudUserRecordID: String? = nil, in data: inout WorthSnapData) -> Member {
+        let member = Member(name: name, icloudUserRecordID: icloudUserRecordID, colorHex: colorHex)
+        data.members.append(member)
+        return member
+    }
+
+    /// 成员离开：人走数据留。归档成员，其归属/负责的账户**不删除**；
+    /// 负责的账户转交给 `reassignResponsibleTo`（nil 则置为未指定，回退给归属成员）。
+    public static func archiveMember(_ memberId: UUID, reassignResponsibleTo newOwner: UUID? = nil, in data: inout WorthSnapData) {
+        guard let index = data.members.firstIndex(where: { $0.id == memberId }) else { return }
+        data.members[index].archived = true
+        data.members[index].updatedAt = Date()
+        for accountIndex in data.accounts.indices where data.accounts[accountIndex].responsibleMemberId == memberId {
+            data.accounts[accountIndex].responsibleMemberId = newOwner
+            data.accounts[accountIndex].updatedAt = Date()
+        }
     }
 
     /// 某月相对上一月的环比对比（总资产 / 总负债 / 净资产）。无上一月时 ratio 为 nil。

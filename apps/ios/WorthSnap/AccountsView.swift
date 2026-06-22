@@ -21,7 +21,7 @@ struct AccountsView: View {
                             Text(account.name)
                                 .font(.headline)
                                 .foregroundStyle(WCTheme.ink)
-                            Text("\(account.direction.title) · \(store.typeName(id: account.typeId)) · \(account.currency) · \(account.ownership.title)")
+                            Text("\(account.direction.title) · \(store.typeName(id: account.typeId)) · \(account.currency) · \(store.memberName(id: account.ownerMemberId))")
                                 .font(.caption)
                                 .foregroundStyle(WCTheme.inkTertiary)
                         }
@@ -86,9 +86,11 @@ private struct AccountFormView: View {
     @State private var name: String
     @State private var direction: Direction
     @State private var currency: String
-    @State private var ownership: Ownership
+    @State private var ownerMemberId: UUID?
+    @State private var responsibleMemberId: UUID?
     @State private var selectedTypeId: UUID?
     @State private var pendingSensitiveSave = false
+    @State private var didDefaultOwner = false
 
     var filteredTypes: [AccountType] {
         store.data.accountTypes.filter { $0.direction == direction && !$0.archived }
@@ -122,13 +124,16 @@ private struct AccountFormView: View {
             _name = State(initialValue: "")
             _direction = State(initialValue: .asset)
             _currency = State(initialValue: "CNY")
-            _ownership = State(initialValue: .me)
+            // 归属默认本人，在 .onAppear 里从 store 填充（init 拿不到 EnvironmentObject）。
+            _ownerMemberId = State(initialValue: nil)
+            _responsibleMemberId = State(initialValue: nil)
             _selectedTypeId = State(initialValue: nil)
         case .edit(let account):
             _name = State(initialValue: account.name)
             _direction = State(initialValue: account.direction)
             _currency = State(initialValue: account.currency)
-            _ownership = State(initialValue: account.ownership)
+            _ownerMemberId = State(initialValue: account.ownerMemberId)
+            _responsibleMemberId = State(initialValue: account.responsibleMemberId)
             _selectedTypeId = State(initialValue: account.typeId)
         }
     }
@@ -154,8 +159,17 @@ private struct AccountFormView: View {
                         Text(currencyTitle(code)).tag(code)
                     }
                 }
-                Picker("归属", selection: $ownership) {
-                    ForEach(Ownership.allCases) { Text($0.title).tag($0) }
+                Picker("归属", selection: $ownerMemberId) {
+                    ForEach(store.activeMembers) { member in
+                        Text(member.name).tag(Optional(member.id))
+                    }
+                    Text("共同").tag(UUID?.none)
+                }
+                Picker("负责人", selection: $responsibleMemberId) {
+                    Text("未指定（归属人）").tag(UUID?.none)
+                    ForEach(store.activeMembers) { member in
+                        Text(member.name).tag(Optional(member.id))
+                    }
                 }
                 if case .edit = mode {
                     Section {
@@ -166,6 +180,14 @@ private struct AccountFormView: View {
                 }
             }
             .navigationTitle(mode.title)
+            .onAppear {
+                // 新增账户：归属默认本人（init 拿不到 store，放到这里填充）。只执行一次，
+                // 否则用户主动选「共同」(nil) 后再次 onAppear 会被改回本人。
+                if case .add = mode, !didDefaultOwner {
+                    ownerMemberId = store.data.currentMemberId
+                    didDefaultOwner = true
+                }
+            }
             .onChange(of: direction) { _, newDirection in
                 if !filteredTypes.contains(where: { $0.id == selectedTypeId && $0.direction == newDirection }) {
                     selectedTypeId = filteredTypes.first?.id
@@ -201,9 +223,9 @@ private struct AccountFormView: View {
         let typeId = selectedTypeId ?? filteredTypes.first!.id
         switch mode {
         case .add:
-            store.addAccount(name: name, direction: direction, typeId: typeId, currency: normalizedCurrency, ownership: ownership)
+            store.addAccount(name: name, direction: direction, typeId: typeId, currency: normalizedCurrency, ownerMemberId: ownerMemberId, responsibleMemberId: responsibleMemberId)
         case .edit(let account):
-            store.updateAccount(account, name: name, direction: direction, typeId: typeId, currency: normalizedCurrency, ownership: ownership)
+            store.updateAccount(account, name: name, direction: direction, typeId: typeId, currency: normalizedCurrency, ownerMemberId: ownerMemberId, responsibleMemberId: responsibleMemberId)
         }
         dismiss()
     }

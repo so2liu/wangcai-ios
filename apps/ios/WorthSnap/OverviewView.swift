@@ -27,6 +27,9 @@ struct OverviewView: View {
                     }
 
                     if hasAccounts {
+                        if showsOwnershipBreakdown {
+                            OwnershipBreakdownCard(snapshot: snapshot)
+                        }
                         InventoryCard(snapshot: snapshot, confirmed: confirmed, total: entries.count, hasAccounts: hasAccounts)
                         TrendCard(snapshot: snapshot)
                         StructureCard(snapshot: snapshot, totalAssets: totals.totalAssets)
@@ -40,6 +43,12 @@ struct OverviewView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(.hidden, for: .navigationBar)
         }
+    }
+
+    /// 仅当账本不是「纯本人单机」时才显示三栏：存在其他成员，或有账户归属他人/共同。
+    private var showsOwnershipBreakdown: Bool {
+        if store.activeMembers.count > 1 { return true }
+        return store.data.accounts.contains { !$0.archived && $0.ownerMemberId != store.data.currentMemberId }
     }
 
     private func header(snapshot: Snapshot) -> some View {
@@ -102,6 +111,42 @@ private struct NetWorthCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .wcCard(fill: WCTheme.netCard)
+    }
+}
+
+// MARK: - 归属三栏（我的 / TA的 / 共同）
+
+private struct OwnershipBreakdownCard: View {
+    @EnvironmentObject private var store: AppStore
+    var snapshot: Snapshot
+
+    private var rows: [(view: OwnershipView, net: Decimal)] {
+        OwnershipView.allCases.map { view in
+            (view, WorthSnapEngine.totals(by: view, for: snapshot, in: store.data).netWorth)
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("按归属").font(.headline).foregroundStyle(WCTheme.ink)
+            ForEach(rows, id: \.view) { row in
+                HStack {
+                    Text(row.view.title)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(WCTheme.inkSecondary)
+                    Spacer()
+                    Text(AppFormatters.symbolized(row.net, currency: snapshot.baseCurrency))
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(WCTheme.ink)
+                        .monospacedDigit()
+                }
+            }
+            Text("家庭净资产 = 三栏之和")
+                .font(.caption)
+                .foregroundStyle(WCTheme.inkFaint)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .wcCard()
     }
 }
 

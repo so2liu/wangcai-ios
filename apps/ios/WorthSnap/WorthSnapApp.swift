@@ -185,14 +185,14 @@ final class AppStore: ObservableObject {
         save()
     }
 
-    func addAccount(name: String, direction: Direction, typeId: UUID, currency: String, ownership: Ownership) {
+    func addAccount(name: String, direction: Direction, typeId: UUID, currency: String, ownerMemberId: UUID?, responsibleMemberId: UUID?) {
         let order = (data.accounts.map(\.sortOrder).max() ?? 0) + 1
-        let account = Account(ledgerId: data.ledger.id, name: name, direction: direction, typeId: typeId, currency: currency, ownership: ownership, sortOrder: order)
+        let account = Account(ledgerId: data.ledger.id, name: name, direction: direction, typeId: typeId, currency: currency, ownerMemberId: ownerMemberId, responsibleMemberId: responsibleMemberId, sortOrder: order)
         WorthSnapEngine.addAccount(account, to: &data)
         save()
     }
 
-    func updateAccount(_ account: Account, name: String, direction: Direction, typeId: UUID, currency: String, ownership: Ownership) {
+    func updateAccount(_ account: Account, name: String, direction: Direction, typeId: UUID, currency: String, ownerMemberId: UUID?, responsibleMemberId: UUID?) {
         guard let index = data.accounts.firstIndex(where: { $0.id == account.id }) else { return }
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedCurrency = currency.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
@@ -201,12 +201,50 @@ final class AppStore: ObservableObject {
         data.accounts[index].direction = direction
         data.accounts[index].typeId = typeId
         data.accounts[index].currency = normalizedCurrency.isEmpty ? data.accounts[index].currency : normalizedCurrency
-        data.accounts[index].ownership = ownership
+        data.accounts[index].ownerMemberId = ownerMemberId
+        data.accounts[index].responsibleMemberId = responsibleMemberId
         data.accounts[index].updatedAt = Date()
 
         for snapshot in data.snapshots {
             WorthSnapEngine.updateCompletion(snapshotId: snapshot.id, in: &data)
         }
+        save()
+    }
+
+    // MARK: - 成员
+
+    /// 未归档成员，当前成员排在最前，便于表单默认选中本人。
+    var activeMembers: [Member] {
+        data.members.filter { !$0.archived }.sorted { lhs, rhs in
+            if lhs.id == data.currentMemberId { return true }
+            if rhs.id == data.currentMemberId { return false }
+            return lhs.createdAt < rhs.createdAt
+        }
+    }
+
+    func memberName(id: UUID?) -> String {
+        data.member(id: id)?.name ?? "共同"
+    }
+
+    func addMember(name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        _ = WorthSnapEngine.addMember(name: trimmed, in: &data)
+        save()
+    }
+
+    func renameMember(_ member: Member, to name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let index = data.members.firstIndex(where: { $0.id == member.id }) else { return }
+        data.members[index].name = trimmed
+        data.members[index].updatedAt = Date()
+        save()
+    }
+
+    /// 成员离开：归档（人走数据留），其负责账户转交给本人。
+    func archiveMember(_ member: Member) {
+        guard member.id != data.currentMemberId else { return } // 不允许移除自己
+        WorthSnapEngine.archiveMember(member.id, reassignResponsibleTo: data.currentMemberId, in: &data)
         save()
     }
 

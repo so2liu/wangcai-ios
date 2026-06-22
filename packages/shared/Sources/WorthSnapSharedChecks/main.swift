@@ -90,12 +90,48 @@ expect(roundTripped.accounts.count == sampleForStore.accounts.count, "round-trip
 expect(roundTripped.snapshots.count == sampleForStore.snapshots.count, "round-trip keeps snapshots")
 expect(roundTripped.entries.count == sampleForStore.entries.count, "round-trip keeps entries")
 
-// 向后兼容：早期没有信封、顶层直接是 WorthSnapData 的旧文件仍能被读取。
-let legacyEncoder = JSONEncoder()
-legacyEncoder.dateEncodingStrategy = .iso8601
-let legacyData = try legacyEncoder.encode(sampleForStore)
-let fromLegacy = try WorthSnapStore.decode(legacyData)
-expect(fromLegacy.accounts.count == sampleForStore.accounts.count, "legacy file decodes without data loss")
+// 向后兼容 + v1→v2 迁移：构造一份「真实的 v1 数据」（Account 带 ownership 枚举、无 members）。
+// 既覆盖「史前无信封文件」也覆盖「v1 信封文件」两条路径。
+let v1DataObject: [String: Any] = [
+    "ledger": ["id": UUID().uuidString, "name": "旺财账本", "baseCurrency": "CNY",
+               "createdAt": "2025-01-01T00:00:00Z", "updatedAt": "2025-01-01T00:00:00Z"],
+    "accountTypes": [], "tags": [], "snapshots": [], "entries": [],
+    "accounts": [
+        ["id": UUID().uuidString, "ledgerId": UUID().uuidString, "name": "我的工资卡",
+         "direction": "asset", "typeId": UUID().uuidString, "currency": "CNY", "ownership": "me",
+         "tagIds": [], "sortOrder": 0, "archived": false,
+         "createdAt": "2025-01-01T00:00:00Z", "updatedAt": "2025-01-01T00:00:00Z"],
+        ["id": UUID().uuidString, "ledgerId": UUID().uuidString, "name": "TA的卡",
+         "direction": "asset", "typeId": UUID().uuidString, "currency": "CNY", "ownership": "partner",
+         "tagIds": [], "sortOrder": 1, "archived": false,
+         "createdAt": "2025-01-01T00:00:00Z", "updatedAt": "2025-01-01T00:00:00Z"],
+        ["id": UUID().uuidString, "ledgerId": UUID().uuidString, "name": "家庭基金",
+         "direction": "asset", "typeId": UUID().uuidString, "currency": "CNY", "ownership": "shared",
+         "tagIds": [], "sortOrder": 2, "archived": false,
+         "createdAt": "2025-01-01T00:00:00Z", "updatedAt": "2025-01-01T00:00:00Z"]
+    ]
+]
+
+// 路径一：史前无信封文件（顶层即 WorthSnapData）。
+let preEnvelope = try JSONSerialization.data(withJSONObject: v1DataObject)
+let fromPre = try WorthSnapStore.decode(preEnvelope)
+expect(fromPre.accounts.count == 3, "legacy pre-envelope decodes all accounts")
+expect(fromPre.members.contains { $0.name == "我" }, "migration creates current member 我")
+expect(fromPre.members.contains { $0.name == "伴侣" }, "migration creates partner member when ownership=partner exists")
+expect(fromPre.currentMember?.name == "我", "currentMemberId points to 我")
+let meId: UUID? = fromPre.currentMemberId
+let myAccount = fromPre.accounts.first { $0.name == "我的工资卡" }!
+expect(myAccount.ownerMemberId == meId, "ownership=me maps to current member")
+expect(myAccount.responsibleMemberId == meId, "responsible defaults to owner")
+expect(fromPre.accounts.first { $0.name == "家庭基金" }!.ownerMemberId == nil, "ownership=shared maps to nil owner (共同)")
+let migratedPartnerId: UUID? = fromPre.members.first { $0.name == "伴侣" }!.id
+expect(fromPre.accounts.first { $0.name == "TA的卡" }!.ownerMemberId == migratedPartnerId, "ownership=partner maps to partner member")
+
+// 路径二：v1 信封文件（{schemaVersion:1, data:{...}}）。
+let v1Envelope = try JSONSerialization.data(withJSONObject: ["schemaVersion": 1, "data": v1DataObject])
+let fromV1 = try WorthSnapStore.decode(v1Envelope)
+expect(fromV1.accounts.count == 3, "v1 envelope decodes all accounts")
+expect(fromV1.members.count == 2, "v1 envelope migration creates two members")
 
 // 损坏文件必须抛错（绝不静默返回空数据）。
 var corruptedThrew = false
@@ -136,5 +172,29 @@ expect(demoTotals.totalAssets == 3_528_000, "demo 总资产 352.8 万")
 expect(demoTotals.totalLiabilities == 664_000, "demo 总负债 66.4 万")
 expect(demoTotals.netWorth == 2_864_000, "demo 净资产 286.4 万")
 expect(approx(WorthSnapEngine.netWorthTrendChange(in: demo), 0.1534, 0.001), "demo 趋势约 +15.3%")
+
+// MARK: - 成员与三栏聚合
+
+// 全新安装：seed 数据自带本机成员「我」，currentMemberId 指向它。
+let seeded = WorthSnapEngine.seededData()
+expect(seeded.members.count == 1 && seeded.currentMember?.name == "我", "seed 自带本机成员 我")
+
+// demo 数据：两个成员，三栏净值之和 == 家庭净资产。
+expect(demo.members.count == 2, "demo 含两名成员")
+let mine = WorthSnapEngine.totals(by: .mine, for: demoCurrent, in: demo)
+let theirs = WorthSnapEngine.totals(by: .theirs, for: demoCurrent, in: demo)
+let sharedT = WorthSnapEngine.totals(by: .shared, for: demoCurrent, in: demo)
+expect(mine.netWorth + theirs.netWorth + sharedT.netWorth == demoTotals.netWorth, "三栏净值之和 == 家庭净资产")
+// demo 里「我」名下：工资卡 45万 + 股票 90万 = 135万资产、无负债。
+expect(mine.totalAssets == 1_350_000 && mine.totalLiabilities == 0, "我的栏资产 135 万")
+
+// 成员离开：归档不删账户，负责账户转交他人。
+var leaveData = demo
+let leavingId = leaveData.members.first { $0.name == "TA" }!.id
+let accountCountBefore = leaveData.accounts.count
+WorthSnapEngine.archiveMember(leavingId, reassignResponsibleTo: leaveData.currentMemberId, in: &leaveData)
+expect(leaveData.accounts.count == accountCountBefore, "成员离开不删除账户（人走数据留）")
+expect(leaveData.members.first { $0.id == leavingId }!.archived, "离开成员被归档")
+expect(!leaveData.accounts.contains { $0.responsibleMemberId == leavingId }, "离开成员的负责账户已转交")
 
 print("WorthSnapSharedChecks passed")

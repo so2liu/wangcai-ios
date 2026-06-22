@@ -28,6 +28,18 @@ struct SettingsView: View {
                 }
             }
             .wcRow()
+            Section("家庭") {
+                NavigationLink {
+                    MembersView()
+                } label: {
+                    HStack {
+                        Label("家庭成员", systemImage: "person.2")
+                        Spacer()
+                        Text("\(store.activeMembers.count) 人").foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .wcRow()
             Section("存储") {
                 Label("数据保存在本机", systemImage: "internaldrive")
                     .foregroundStyle(WCTheme.ink)

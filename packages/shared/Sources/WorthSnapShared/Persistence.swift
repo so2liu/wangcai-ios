@@ -3,7 +3,7 @@ import Foundation
 /// 数据结构版本。每次对持久化结构做**不兼容**修改时把 current +1，
 /// 并在 `WorthSnapStore.migrateStep` 里补一条 from→from+1 的升级路径。
 public enum WorthSnapSchema {
-    public static let current = 1
+    public static let current = 2
 }
 
 public enum WorthSnapStoreError: Error, Equatable {
@@ -54,9 +54,15 @@ public enum WorthSnapStore {
         let probe = try? decoder.decode(VersionProbe.self, from: raw)
 
         guard let version = probe?.schemaVersion else {
-            // 旧文件：没有信封、没有版本号，顶层即 WorthSnapData。
+            // 史前文件：没有信封、没有版本号，顶层即 WorthSnapData（结构等同 v1 的 data 负载）。
+            // 包成 v1 信封后并入统一迁移路径，复用 v1→v2 转换，避免重复逻辑。
+            guard let object = try? JSONSerialization.jsonObject(with: raw),
+                  let wrapped = try? JSONSerialization.data(withJSONObject: ["schemaVersion": 1, "data": object]) else {
+                throw WorthSnapStoreError.corrupted(reason: "legacy file is not valid JSON object")
+            }
+            let migrated = try migrate(wrapped, from: 1)
             do {
-                return try decoder.decode(WorthSnapData.self, from: raw)
+                return try decoder.decode(Envelope.self, from: migrated).data
             } catch {
                 throw WorthSnapStoreError.corrupted(reason: String(describing: error))
             }
@@ -88,9 +94,66 @@ public enum WorthSnapStore {
     /// 单步迁移 from → from+1。未来新增不兼容版本时在此实现具体转换。
     private static func migrateStep(_ raw: Data, from version: Int) throws -> Data {
         switch version {
-        // case 1: return try v1ToV2(raw)  // 示例：将来 current 升到 2 时实现
+        case 1:
+            return try v1ToV2(raw)
         default:
             return raw
         }
+    }
+
+    /// v1 → v2：引入「成员」。v1 的 Account 用 `ownership` 枚举（me/partner/shared）表达归属，
+    /// v2 改为 `ownerMemberId`（指向成员，nil=共同）+ `responsibleMemberId`，并在顶层加 `members` / `currentMemberId`。
+    ///
+    /// 迁移规则（人走数据留、不丢不重标）：
+    /// - 新建本机成员「我」，`currentMemberId` 指向它；ownership=me 的账户归到「我」。
+    /// - 仅当存在 ownership=partner 的账户时，才新建「伴侣」成员并归过去。
+    /// - ownership=shared → ownerMemberId 置空（共同财产）。
+    /// - responsibleMemberId 默认等于 ownerMemberId。
+    private static func v1ToV2(_ raw: Data) throws -> Data {
+        guard var envelope = (try? JSONSerialization.jsonObject(with: raw)) as? [String: Any],
+              var data = envelope["data"] as? [String: Any] else {
+            throw WorthSnapStoreError.corrupted(reason: "v1 envelope missing data object")
+        }
+
+        // 时间戳沿用账本创建时间，缺失则用当前时间，保证迁移可重放、不依赖随机。
+        let now = ISO8601DateFormatter().string(from: Date())
+        let ledgerCreatedAt = (data["ledger"] as? [String: Any])?["createdAt"] as? String ?? now
+
+        func makeMember(name: String, color: String) -> [String: Any] {
+            ["id": UUID().uuidString, "name": name, "colorHex": color,
+             "archived": false, "createdAt": ledgerCreatedAt, "updatedAt": ledgerCreatedAt]
+        }
+
+        let me = makeMember(name: "我", color: "C8A24B")
+        let meId = me["id"] as! String
+        var partner: [String: Any]?
+
+        var accounts = data["accounts"] as? [[String: Any]] ?? []
+        for index in accounts.indices {
+            let ownership = accounts[index]["ownership"] as? String ?? "me"
+            accounts[index].removeValue(forKey: "ownership")
+            switch ownership {
+            case "partner":
+                if partner == nil { partner = makeMember(name: "伴侣", color: "E08F6B") }
+                let pid = partner!["id"] as! String
+                accounts[index]["ownerMemberId"] = pid
+                accounts[index]["responsibleMemberId"] = pid
+            case "shared":
+                break // ownerMemberId 缺省 = nil（共同）
+            default: // me
+                accounts[index]["ownerMemberId"] = meId
+                accounts[index]["responsibleMemberId"] = meId
+            }
+        }
+        data["accounts"] = accounts
+
+        var members = [me]
+        if let partner { members.append(partner) }
+        data["members"] = members
+        data["currentMemberId"] = meId
+
+        envelope["data"] = data
+        envelope["schemaVersion"] = 2
+        return try JSONSerialization.data(withJSONObject: envelope)
     }
 }

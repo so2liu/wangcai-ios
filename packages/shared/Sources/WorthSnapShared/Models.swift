@@ -8,18 +8,48 @@ public enum Direction: String, Codable, CaseIterable, Identifiable, Sendable {
     public var title: String { self == .asset ? "资产" : "负债" }
 }
 
-public enum Ownership: String, Codable, CaseIterable, Identifiable, Sendable {
-    case me
-    case partner
+/// 账户相对「当前查看者」的归属视角。由 `Account.ownerMemberId` 结合当前成员动态计算，
+/// 仅用于 UI 展示与三栏聚合，不直接持久化——同一份数据在不同成员设备上「我的 / TA的」会自动互换。
+public enum OwnershipView: String, CaseIterable, Identifiable, Sendable {
+    /// 归属当前查看者本人。
+    case mine
+    /// 归属其他成员（典型为伴侣；成员超过两人时统一归这一类）。
+    case theirs
+    /// 共同财产（ownerMemberId 为空）。
     case shared
 
     public var id: String { rawValue }
     public var title: String {
         switch self {
-        case .me: "我"
-        case .partner: "伴侣"
+        case .mine: "我的"
+        case .theirs: "TA的"
         case .shared: "共同"
         }
+    }
+}
+
+/// 家庭成员：会登录、会录入的人（典型 2 人）。
+/// 离开 = `archived`（人走数据留，绝不连带删除其录入的账户与历史）。
+public struct Member: Codable, Equatable, Identifiable, Sendable {
+    public var id: UUID
+    public var name: String
+    /// CloudKit 身份（`CKShare.Participant` 的 userRecordID）。阶段 A 的本机成员为 nil，
+    /// 加入家庭后回填，用于把同一 iCloud 用户在不同设备上识别为同一成员。
+    public var icloudUserRecordID: String?
+    /// 成员标识色（十六进制，如 "F2B705"），用于头像/三栏点缀。
+    public var colorHex: String
+    public var archived: Bool
+    public var createdAt: Date
+    public var updatedAt: Date
+
+    public init(id: UUID = UUID(), name: String, icloudUserRecordID: String? = nil, colorHex: String = "C8A24B", archived: Bool = false, createdAt: Date = Date(), updatedAt: Date = Date()) {
+        self.id = id
+        self.name = name
+        self.icloudUserRecordID = icloudUserRecordID
+        self.colorHex = colorHex
+        self.archived = archived
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
     }
 }
 
@@ -74,21 +104,25 @@ public struct Account: Codable, Equatable, Identifiable, Sendable {
     public var direction: Direction
     public var typeId: UUID
     public var currency: String
-    public var ownership: Ownership
+    /// 归属的成员 id；nil 表示「共同」财产（房产、房贷、家庭基金等）。
+    public var ownerMemberId: UUID?
+    /// 每月负责更新此账户的成员 id；nil 表示未指定（盘点时回退给归属成员）。
+    public var responsibleMemberId: UUID?
     public var tagIds: [UUID]
     public var sortOrder: Int
     public var archived: Bool
     public var createdAt: Date
     public var updatedAt: Date
 
-    public init(id: UUID = UUID(), ledgerId: UUID, name: String, direction: Direction, typeId: UUID, currency: String = "CNY", ownership: Ownership = .me, tagIds: [UUID] = [], sortOrder: Int = 0, archived: Bool = false, createdAt: Date = Date(), updatedAt: Date = Date()) {
+    public init(id: UUID = UUID(), ledgerId: UUID, name: String, direction: Direction, typeId: UUID, currency: String = "CNY", ownerMemberId: UUID? = nil, responsibleMemberId: UUID? = nil, tagIds: [UUID] = [], sortOrder: Int = 0, archived: Bool = false, createdAt: Date = Date(), updatedAt: Date = Date()) {
         self.id = id
         self.ledgerId = ledgerId
         self.name = name
         self.direction = direction
         self.typeId = typeId
         self.currency = currency
-        self.ownership = ownership
+        self.ownerMemberId = ownerMemberId
+        self.responsibleMemberId = responsibleMemberId
         self.tagIds = tagIds
         self.sortOrder = sortOrder
         self.archived = archived
@@ -151,18 +185,38 @@ public struct SnapshotEntry: Codable, Equatable, Identifiable, Sendable {
 
 public struct WorthSnapData: Codable, Equatable, Sendable {
     public var ledger: Ledger
+    public var members: [Member]
+    /// 本设备登录者对应的成员 id。决定「我的 / TA的」如何翻译。
+    /// 加入家庭后指向自己在该家庭里的成员记录。
+    public var currentMemberId: UUID
     public var accountTypes: [AccountType]
     public var tags: [Tag]
     public var accounts: [Account]
     public var snapshots: [Snapshot]
     public var entries: [SnapshotEntry]
 
-    public init(ledger: Ledger = Ledger(), accountTypes: [AccountType] = [], tags: [Tag] = [], accounts: [Account] = [], snapshots: [Snapshot] = [], entries: [SnapshotEntry] = []) {
+    public init(ledger: Ledger = Ledger(), members: [Member] = [], currentMemberId: UUID = UUID(), accountTypes: [AccountType] = [], tags: [Tag] = [], accounts: [Account] = [], snapshots: [Snapshot] = [], entries: [SnapshotEntry] = []) {
         self.ledger = ledger
+        self.members = members
+        self.currentMemberId = currentMemberId
         self.accountTypes = accountTypes
         self.tags = tags
         self.accounts = accounts
         self.snapshots = snapshots
         self.entries = entries
+    }
+
+    /// 当前查看者成员。约定：`currentMemberId` 必然存在于 `members`（seed/迁移时保证）。
+    public var currentMember: Member? { members.first { $0.id == currentMemberId } }
+
+    public func member(id: UUID?) -> Member? {
+        guard let id else { return nil }
+        return members.first { $0.id == id }
+    }
+
+    /// 账户相对当前查看者的归属视角。
+    public func ownershipView(of account: Account) -> OwnershipView {
+        guard let owner = account.ownerMemberId else { return .shared }
+        return owner == currentMemberId ? .mine : .theirs
     }
 }
