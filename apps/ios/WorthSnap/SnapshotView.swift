@@ -63,6 +63,8 @@ struct SnapshotView: View {
                         set: { value in
                             if let index = store.data.snapshots.firstIndex(where: { $0.id == snapshot.id }) {
                                 store.data.snapshots[index].note = value
+                                // 必须 bump updatedAt：同步按 updatedAt 算增量，否则备注改动不会推给其他设备。
+                                store.data.snapshots[index].updatedAt = Date()
                                 store.save()
                             }
                         }

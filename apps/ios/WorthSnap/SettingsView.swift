@@ -54,7 +54,10 @@ struct SettingsView: View {
             Section {
                 Toggle(isOn: Binding(
                     get: { store.cloud.enabled },
-                    set: { on in if on { Task { await store.cloud.enable() } } }
+                    set: { on in
+                        if on { Task { await store.cloud.enable() } }
+                        else { store.cloud.disable() }
+                    }
                 )) {
                     Label("iCloud 同步", systemImage: "icloud")
                 }

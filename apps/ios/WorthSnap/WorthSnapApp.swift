@@ -21,12 +21,32 @@ struct WorthSnapApp: App {
 
 /// 仅用于接收 CloudKit 共享邀请的系统回调（SwiftUI 生命周期没有等价入口）。
 final class AppDelegate: NSObject, UIApplicationDelegate {
-    weak var store: AppStore?
+    weak var store: AppStore? {
+        didSet { flushPendingShareIfPossible() }
+    }
+    /// 冷启动场景：App 因点开邀请而启动时，系统可能在 RootView.onAppear 注入 store 之前
+    /// 就回调 userDidAcceptCloudKitShareWith。此时先缓冲 metadata，待 store 就绪再处理，
+    /// 否则邀请会被静默丢弃、用户无法加入家庭。
+    private var pendingShareMetadata: CKShare.Metadata?
 
     func application(_ application: UIApplication, userDidAcceptCloudKitShareWith cloudKitShareMetadata: CKShare.Metadata) {
+        if store == nil {
+            pendingShareMetadata = cloudKitShareMetadata
+        } else {
+            handle(cloudKitShareMetadata)
+        }
+    }
+
+    private func flushPendingShareIfPossible() {
+        guard store != nil, let metadata = pendingShareMetadata else { return }
+        pendingShareMetadata = nil
+        handle(metadata)
+    }
+
+    private func handle(_ metadata: CKShare.Metadata) {
         guard #available(iOS 17.0, *) else { return }
         Task { @MainActor in
-            await store?.acceptFamilyShare(cloudKitShareMetadata)
+            await store?.acceptFamilyShare(metadata)
         }
     }
 }

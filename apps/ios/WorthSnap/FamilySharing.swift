@@ -109,6 +109,15 @@ final class CloudSyncCoordinator: ObservableObject {
         status = .idle
     }
 
+    /// 关闭 iCloud 同步：持久化为关闭、停掉引擎，之后本地改动不再上行、也不再拉取。
+    /// 不删除云端已有家庭数据（用户可重新开启）。
+    func disable() {
+        setEnabled(false)
+        privateEngine = nil
+        sharedEngine = nil
+        status = .off
+    }
+
     /// App 启动时恢复同步：之前已开启过的用户无需手动再开。
     /// 不重新全量推送——CKSyncEngine 的 pending 变更与 change token 已随状态序列化持久化，
     /// 这里只重建引擎并按当前数据重置指纹，供后续增量 diff 使用。
