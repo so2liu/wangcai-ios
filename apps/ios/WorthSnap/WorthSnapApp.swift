@@ -192,12 +192,28 @@ final class AppStore: ObservableObject {
 
     /// 用一份外部数据（如从 JSON 备份恢复）整体替换当前数据。
     /// 成功后退出安全模式并立即落盘——这也是安全模式用户找回数据的出口。
+    ///
+    /// 恢复是「权威操作」：用户明确选定这份数据为准。开启同步时，备份里实体的 updatedAt
+    /// 往往比云端旧，若按时间戳增量 diff 既不会上传、还会被云端较新记录合并盖回，恢复就失效了。
+    /// 因此把所有实体时间戳顶到当前，确保恢复值上传成功并在本地合并中胜出。
     func replaceAll(with newData: WorthSnapData) {
-        data = newData
+        var authoritative = newData
+        AppStore.touchAllTimestamps(in: &authoritative)
+        data = authoritative
         loadFailed = false
         corruptBackupURL = nil
-        selectedMonth = AppStore.latestMonth(in: newData)
+        selectedMonth = AppStore.latestMonth(in: authoritative)
         save()
+    }
+
+    /// 把整份数据所有实体的 updatedAt 顶到当前，使其成为同步中的最新版本。
+    private static func touchAllTimestamps(in data: inout WorthSnapData) {
+        let now = Date()
+        data.ledger.updatedAt = now
+        for index in data.members.indices { data.members[index].updatedAt = now }
+        for index in data.accounts.indices { data.accounts[index].updatedAt = now }
+        for index in data.snapshots.indices { data.snapshots[index].updatedAt = now }
+        for index in data.entries.indices { data.entries[index].updatedAt = now }
     }
 
     /// 从备份文件原始字节恢复：用安全解码校验后替换。失败抛错，绝不破坏现有数据。
