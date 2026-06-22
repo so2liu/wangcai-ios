@@ -197,4 +197,52 @@ expect(leaveData.accounts.count == accountCountBefore, "成员离开不删除账
 expect(leaveData.members.first { $0.id == leavingId }!.archived, "离开成员被归档")
 expect(!leaveData.accounts.contains { $0.responsibleMemberId == leavingId }, "离开成员的负责账户已转交")
 
+// MARK: - 同步合并（后写覆盖 LWW）
+
+// 全量记录往返：空数据合并远端全量 == 原数据（账户/快照/明细数量一致）。
+let syncSource = WorthSnapEngine.demoData()
+let allRecords = try syncSource.toSyncRecords()
+expect(allRecords.contains { $0.recordType == SyncRecordType.ledger }, "sync records include ledger")
+expect(allRecords.filter { $0.recordType == SyncRecordType.member }.count == 2, "sync records include both members")
+
+var blank = WorthSnapEngine.seededData()
+blank = try blank.merging(remote: allRecords)
+expect(blank.accounts.count == syncSource.accounts.count, "merge brings in all accounts")
+expect(blank.entries.count >= syncSource.entries.count, "merge brings in all entries")
+expect(blank.members.contains { $0.name == "TA" }, "merge brings in remote member")
+// currentMemberId 不被同步覆盖：仍是本地 seed 的本机成员。
+expect(blank.members.contains { $0.id == blank.currentMemberId }, "currentMemberId stays local after merge")
+
+// LWW：远端较旧的账户改名不应覆盖本地较新的值。
+var lwwData = WorthSnapEngine.sampleData()
+let acc = lwwData.accounts[0]
+let base = acc.updatedAt
+// 本地把账户改成「新名」，更新时间 = base+10s。
+if let idx = lwwData.accounts.firstIndex(where: { $0.id == acc.id }) {
+    lwwData.accounts[idx].name = "本地新名"
+    lwwData.accounts[idx].updatedAt = base.addingTimeInterval(10)
+}
+// 构造一条「远端较旧」记录（updatedAt = base，名字=远端旧名）。
+var staleAccount = acc
+staleAccount.name = "远端旧名"
+staleAccount.updatedAt = base
+let staleRecord = SyncRecord(recordType: SyncRecordType.account, recordName: acc.id.uuidString,
+                             updatedAt: base, payload: try WorthSnapStore.makeEncoder().encode(staleAccount))
+let afterStale = try lwwData.merging(remote: [staleRecord])
+expect(afterStale.accounts.first { $0.id == acc.id }?.name == "本地新名", "LWW: 远端较旧不覆盖本地较新")
+
+// 远端较新则采纳。
+var freshAccount = acc
+freshAccount.name = "远端更新名"
+let freshTime = base.addingTimeInterval(100)
+freshAccount.updatedAt = freshTime
+let freshRecord = SyncRecord(recordType: SyncRecordType.account, recordName: acc.id.uuidString,
+                             updatedAt: freshTime, payload: try WorthSnapStore.makeEncoder().encode(freshAccount))
+let afterFresh = try lwwData.merging(remote: [freshRecord])
+expect(afterFresh.accounts.first { $0.id == acc.id }?.name == "远端更新名", "LWW: 远端较新覆盖本地")
+
+// 删除：远端删除的记录从本地移除。
+let afterDelete = try lwwData.merging(remote: [], deletedRecordNames: [acc.id.uuidString])
+expect(!afterDelete.accounts.contains { $0.id == acc.id }, "remote deletion removes local account")
+
 print("WorthSnapSharedChecks passed")

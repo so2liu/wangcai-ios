@@ -1,14 +1,29 @@
 import SwiftUI
+import CloudKit
 import WorthSnapShared
 
 @main
 struct WorthSnapApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var store = AppStore()
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environmentObject(store)
+                .onAppear { appDelegate.store = store }
+        }
+    }
+}
+
+/// 仅用于接收 CloudKit 共享邀请的系统回调（SwiftUI 生命周期没有等价入口）。
+final class AppDelegate: NSObject, UIApplicationDelegate {
+    weak var store: AppStore?
+
+    func application(_ application: UIApplication, userDidAcceptCloudKitShareWith cloudKitShareMetadata: CKShare.Metadata) {
+        guard #available(iOS 17.0, *) else { return }
+        Task { @MainActor in
+            await store?.acceptFamilyShare(cloudKitShareMetadata)
         }
     }
 }
@@ -22,6 +37,19 @@ final class AppStore: ObservableObject {
     @Published private(set) var loadFailed: Bool = false
     /// 安全模式下，损坏原文件被复制到的备份路径（供 UI 告知用户）。
     @Published private(set) var corruptBackupURL: URL?
+
+    /// iCloud 家庭共享协调器。懒加载：仅在用户开启同步后创建。
+    private var _cloud: Any?
+    @available(iOS 17.0, *)
+    var cloud: CloudSyncCoordinator {
+        if let existing = _cloud as? CloudSyncCoordinator { return existing }
+        let coordinator = CloudSyncCoordinator(
+            dataProvider: { [weak self] in self?.data ?? WorthSnapEngine.seededData() },
+            applyRemote: { [weak self] records, deletions in self?.applyRemoteRecords(records, deletions: deletions) }
+        )
+        _cloud = coordinator
+        return coordinator
+    }
 
     private let url: URL
 
@@ -61,6 +89,15 @@ final class AppStore: ObservableObject {
     }
 
     func save() {
+        persist()
+        // 本地改动落盘后，把增量推给 iCloud（仅在已开启同步时生效）。
+        if #available(iOS 17.0, *), _cloud != nil {
+            cloud.localDidChange(data)
+        }
+    }
+
+    /// 只写盘、不触发云推送。供本地保存与「合并远端变更」复用，避免远端→本地→再回推的回声。
+    private func persist() {
         // 安全模式下绝不写盘，保护磁盘上仍然完好的原文件。
         guard !loadFailed else { return }
         do {
@@ -70,6 +107,24 @@ final class AppStore: ObservableObject {
             // 写失败不致命：保留磁盘上的旧版本，下次操作会再次尝试。
             NSLog("WorthSnap save failed: \(error)")
         }
+    }
+
+    /// 把远端拉取到的同步记录按后写覆盖合并进本地，并落盘（不回推）。
+    @available(iOS 17.0, *)
+    func applyRemoteRecords(_ records: [SyncRecord], deletions: [String]) {
+        guard let merged = try? data.merging(remote: records, deletedRecordNames: deletions) else { return }
+        data = merged
+        // 合并后当前选中月可能已不存在（远端删了快照），交给 snapshot() 兜底重选。
+        if !data.snapshots.contains(where: { $0.month == selectedMonth }) {
+            selectedMonth = AppStore.latestMonth(in: data)
+        }
+        persist()
+    }
+
+    /// 接受家庭共享邀请：交给协调器处理，成功后远端数据会自动合并进来。
+    @available(iOS 17.0, *)
+    func acceptFamilyShare(_ metadata: CKShare.Metadata) async {
+        await cloud.acceptShare(metadata)
     }
 
     /// 用一份外部数据（如从 JSON 备份恢复）整体替换当前数据。

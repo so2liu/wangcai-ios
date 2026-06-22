@@ -1,4 +1,5 @@
 import SwiftUI
+import CloudKit
 import WorthSnapShared
 import UniformTypeIdentifiers
 
@@ -8,6 +9,9 @@ struct SettingsView: View {
     @State private var showImporter = false
     @State private var importError: String?
     @State private var pendingImport: WorthSnapData?
+    @State private var familyShare: CKShare?
+    @State private var familyContainer: CKContainer?
+    @State private var preparingShare = false
 
     var body: some View {
         List {
@@ -43,13 +47,34 @@ struct SettingsView: View {
             Section("存储") {
                 Label("数据保存在本机", systemImage: "internaldrive")
                     .foregroundStyle(WCTheme.ink)
-                // 诚实标注 iCloud 同步为「计划中」，不暗示其已就绪。
-                HStack {
+            }
+            .wcRow()
+            Section {
+                Toggle(isOn: Binding(
+                    get: { store.cloud.enabled },
+                    set: { on in if on { Task { await store.cloud.enable() } } }
+                )) {
                     Label("iCloud 同步", systemImage: "icloud")
-                    Spacer()
-                    Text("计划中").foregroundStyle(.secondary)
                 }
-                .foregroundStyle(.secondary)
+                HStack {
+                    Text("状态")
+                    Spacer()
+                    Text(syncStatusText).foregroundStyle(.secondary)
+                }
+                Button {
+                    Task { await prepareShare() }
+                } label: {
+                    HStack {
+                        Label("邀请家人加入", systemImage: "person.crop.circle.badge.plus")
+                        Spacer()
+                        if preparingShare { ProgressView() }
+                    }
+                }
+                .disabled(preparingShare)
+            } header: {
+                Text("家庭共享")
+            } footer: {
+                Text("开启后家庭账本通过你的 iCloud 私有库同步给受邀成员，数据不经第三方服务器。邀请通过 AirDrop / 信息 / 二维码发送。")
             }
             .wcRow()
             Section("导出") {
@@ -96,6 +121,15 @@ struct SettingsView: View {
         .wcScreen()
         .tint(WCTheme.goldDeep)
         .navigationTitle("设置")
+        .sheet(isPresented: Binding(
+            get: { familyShare != nil && familyContainer != nil },
+            set: { if !$0 { familyShare = nil; familyContainer = nil } }
+        )) {
+            if let share = familyShare, let container = familyContainer {
+                FamilyShareSheet(share: share, container: container)
+                    .ignoresSafeArea()
+            }
+        }
         .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in
             switch result {
             case .success(let url):
@@ -130,6 +164,28 @@ struct SettingsView: View {
             Button("好", role: .cancel) { importError = nil }
         } message: {
             Text(importError ?? "")
+        }
+    }
+
+    private var syncStatusText: String {
+        switch store.cloud.status {
+        case .off: return "未开启"
+        case .syncing: return "同步中…"
+        case .idle: return "已同步"
+        case .error(let message): return message
+        }
+    }
+
+    /// 准备共享对象并弹出系统邀请界面。
+    private func prepareShare() async {
+        preparingShare = true
+        defer { preparingShare = false }
+        do {
+            let (share, container) = try await store.cloud.makeShare()
+            familyShare = share
+            familyContainer = container
+        } catch {
+            importError = "创建共享失败：\(error.localizedDescription)"
         }
     }
 }
