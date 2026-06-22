@@ -10,9 +10,11 @@ private let log = Logger(subsystem: "com.yueyu.WorthSnap", category: "FamilyShar
 
 enum CloudSyncError: LocalizedError {
     case safeMode
+    case participantCannotInvite
     var errorDescription: String? {
         switch self {
         case .safeMode: return "数据处于安全模式，暂时无法开启共享。"
+        case .participantCannotInvite: return "你是受邀加入的成员，邀请新成员需由家庭创建者操作。"
         }
     }
 }
@@ -198,6 +200,10 @@ final class CloudSyncCoordinator: ObservableObject {
     /// 创建（或取得）家庭 zone 的共享对象，供 UICloudSharingController 展示邀请界面。
     func makeShare() async throws -> (CKShare, CKContainer) {
         guard !isSafeMode() else { throw CloudSyncError.safeMode }
+        // 受邀者不能把自己翻成 owner：那会跳过 enable()（其 enabled 已为 true）、不建私有引擎，
+        // 导致之后的保存选到 nil 的 privateEngine，重启后还会去同步一个新的私有 Family zone
+        // 而非已接受的共享。家庭账本的 zone 由发起人管理，受邀者暂不支持再发起邀请。
+        guard role != .participant else { throw CloudSyncError.participantCannotInvite }
         role = .owner
         if !enabled { await enable() }
         let zone = CKRecordZone(zoneID: ownerZoneID)

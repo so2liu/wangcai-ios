@@ -100,6 +100,12 @@ final class AppStore: ObservableObject {
             let decoded = try WorthSnapStore.decode(stored)
             data = decoded
             selectedMonth = AppStore.latestMonth(in: decoded)
+            // 旧格式（史前无信封 / v1）经迁移会生成新的成员 UUID。若不立即回写 v2，
+            // 下次启动会对同一文件重新迁移、生成不同 UUID，开启同步后造成重复成员、owner 漂移。
+            // 检测：重新编码与磁盘字节不一致即说明发生了迁移（已是 v2 的文件 round-trip 稳定、不会写）。
+            if let reencoded = try? WorthSnapStore.encode(decoded), reencoded != stored {
+                try? AppStore.writeAtomically(reencoded, to: url)
+            }
         } catch {
             // 关键：解码失败绝不静默覆盖。备份损坏文件、进入安全模式、禁止保存。
             let backup = AppStore.backupCorruptedFile(at: url)
