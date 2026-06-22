@@ -8,6 +8,15 @@ import WorthSnapShared
 
 private let log = Logger(subsystem: "com.yueyu.WorthSnap", category: "FamilySharing")
 
+enum CloudSyncError: LocalizedError {
+    case safeMode
+    var errorDescription: String? {
+        switch self {
+        case .safeMode: return "数据处于安全模式，暂时无法开启共享。"
+        }
+    }
+}
+
 /// 本设备相对「家庭」的角色，决定数据走私有库还是共享库。持久化在 UserDefaults。
 enum FamilyRole: String {
     /// 发起人 / 单机：家庭数据在自己的私有库 Family zone。
@@ -59,6 +68,9 @@ final class CloudSyncCoordinator: ObservableObject {
     private let dataProvider: () -> WorthSnapData
     /// 把远端变更合并回 AppStore（在主线程执行）。
     private let applyRemote: ([SyncRecord], [String]) -> Void
+    /// 是否处于「安全模式」（本地文件解码失败、data 为占位）。安全模式下严禁任何云端写入，
+    /// 否则会把占位/示例数据推上云、覆盖云端真实家庭数据。
+    private let isSafeMode: () -> Bool
 
     /// 上次已同步的记录指纹（recordName → updatedAt），用于本地改动时算增量。
     private var lastSynced: [String: Date] = [:]
@@ -69,17 +81,20 @@ final class CloudSyncCoordinator: ObservableObject {
     }
 
     init(dataProvider: @escaping () -> WorthSnapData,
-         applyRemote: @escaping ([SyncRecord], [String]) -> Void) {
+         applyRemote: @escaping ([SyncRecord], [String]) -> Void,
+         isSafeMode: @escaping () -> Bool) {
         self.container = CKContainer(identifier: familyContainerID)
         self.ownerZoneID = CKRecordZone.ID(zoneName: familyZoneName, ownerName: CKCurrentUserDefaultName)
         self.dataProvider = dataProvider
         self.applyRemote = applyRemote
+        self.isSafeMode = isSafeMode
     }
 
     // MARK: 开启 / 增量推送
 
     /// 开启 iCloud 同步：检查账号、起对应角色的引擎、把本地全量推一遍。
     func enable() async {
+        guard !isSafeMode() else { status = .error("数据安全模式下暂停同步"); return }
         let accountStatus = (try? await container.accountStatus()) ?? .couldNotDetermine
         guard accountStatus == .available else {
             status = .error("请先在系统设置登录 iCloud")
@@ -137,7 +152,7 @@ final class CloudSyncCoordinator: ObservableObject {
 
     /// 本地数据有改动：算出与上次同步的差异，把变更/删除推给当前角色对应的引擎。
     func localDidChange(_ data: WorthSnapData) {
-        guard enabled, let records = try? data.toSyncRecords() else { return }
+        guard enabled, !isSafeMode(), let records = try? data.toSyncRecords() else { return }
         let current = Dictionary(uniqueKeysWithValues: records.map { ($0.recordName, $0.updatedAt) })
 
         let changed = records.filter { rec in
@@ -168,6 +183,7 @@ final class CloudSyncCoordinator: ObservableObject {
 
     /// 创建（或取得）家庭 zone 的共享对象，供 UICloudSharingController 展示邀请界面。
     func makeShare() async throws -> (CKShare, CKContainer) {
+        guard !isSafeMode() else { throw CloudSyncError.safeMode }
         role = .owner
         if !enabled { await enable() }
         let zone = CKRecordZone(zoneID: ownerZoneID)

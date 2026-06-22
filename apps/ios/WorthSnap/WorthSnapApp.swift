@@ -48,7 +48,8 @@ final class AppStore: ObservableObject {
         if let existing = _cloud as? CloudSyncCoordinator { return existing }
         let coordinator = CloudSyncCoordinator(
             dataProvider: { [weak self] in self?.data ?? WorthSnapEngine.seededData() },
-            applyRemote: { [weak self] records, deletions in self?.applyRemoteRecords(records, deletions: deletions) }
+            applyRemote: { [weak self] records, deletions in self?.applyRemoteRecords(records, deletions: deletions) },
+            isSafeMode: { [weak self] in self?.loadFailed ?? true }
         )
         _cloud = coordinator
         return coordinator
@@ -140,6 +141,9 @@ final class AppStore: ObservableObject {
             fresh.entries = []
             fresh.tags = []
             fresh.accountTypes = []         // 采用发起人的账户类型，避免重复/冲突
+            // 账本是单例：把本地种子账本时间戳压到最早，确保合并时一定采纳发起人的账本，
+            // 而不是因「种子账本在安装时创建、反而更新」把对方账本挡在外面。
+            fresh.ledger.updatedAt = .distantPast
             self.data = fresh
             self.persist()
         }
