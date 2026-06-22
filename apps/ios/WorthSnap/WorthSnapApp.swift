@@ -11,7 +11,10 @@ struct WorthSnapApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(store)
-                .onAppear { appDelegate.store = store }
+                .onAppear {
+                    appDelegate.store = store
+                    if #available(iOS 17.0, *) { store.bootstrapCloudSync() }
+                }
         }
     }
 }
@@ -122,9 +125,32 @@ final class AppStore: ObservableObject {
     }
 
     /// 接受家庭共享邀请：交给协调器处理，成功后远端数据会自动合并进来。
+    /// 加入前清空本地单机的可同步数据（仅保留「自己」这名成员），让位给共享家庭、
+    /// 避免旧账户/快照被回传污染对方家庭。
     @available(iOS 17.0, *)
     func acceptFamilyShare(_ metadata: CKShare.Metadata) async {
-        await cloud.acceptShare(metadata)
+        await cloud.acceptShare(metadata) { [weak self] in
+            guard let self else { return }
+            let me = self.data.currentMember ?? Member(name: WorthSnapEngine.defaultMemberName)
+            var fresh = self.data
+            fresh.members = [me]            // 仅保留自己，作为加入家庭的新成员
+            fresh.currentMemberId = me.id
+            fresh.accounts = []
+            fresh.snapshots = []
+            fresh.entries = []
+            fresh.tags = []
+            fresh.accountTypes = []         // 采用发起人的账户类型，避免重复/冲突
+            self.data = fresh
+            self.persist()
+        }
+    }
+
+    /// App 启动后恢复 iCloud 同步：之前开启过的用户自动重连，无需手动再开。
+    /// 安全模式下不启动（避免在数据可疑时触发云端写入）。
+    @available(iOS 17.0, *)
+    func bootstrapCloudSync() {
+        guard !loadFailed, UserDefaults.standard.bool(forKey: CloudSyncCoordinator.enabledKey) else { return }
+        cloud.resume()
     }
 
     /// 用一份外部数据（如从 JSON 备份恢复）整体替换当前数据。

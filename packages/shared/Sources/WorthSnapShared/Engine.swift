@@ -235,7 +235,13 @@ public enum WorthSnapEngine {
         guard let index = data.members.firstIndex(where: { $0.id == memberId }) else { return }
         data.members[index].archived = true
         data.members[index].updatedAt = Date()
-        for accountIndex in data.accounts.indices where data.accounts[accountIndex].responsibleMemberId == memberId {
+        for accountIndex in data.accounts.indices {
+            let account = data.accounts[accountIndex]
+            // 显式指定离开者为负责人；或负责人未指定（隐式=归属人）而归属正是离开者——
+            // 后者若不处理，账户实际仍“由已归档成员负责”，与 UI 承诺的“转交”不符。
+            let explicitlyResponsible = account.responsibleMemberId == memberId
+            let implicitlyResponsible = account.responsibleMemberId == nil && account.ownerMemberId == memberId
+            guard explicitlyResponsible || implicitlyResponsible else { continue }
             data.accounts[accountIndex].responsibleMemberId = newOwner
             data.accounts[accountIndex].updatedAt = Date()
         }

@@ -191,11 +191,22 @@ expect(mine.totalAssets == 1_350_000 && mine.totalLiabilities == 0, "我的栏�
 // 成员离开：归档不删账户，负责账户转交他人。
 var leaveData = demo
 let leavingId = leaveData.members.first { $0.name == "TA" }!.id
+// 额外构造一个「归属离开者、负责人未指定（隐式=归属人）」的账户，覆盖隐式负责人路径。
+let implicitType = leaveData.accountTypes.first { $0.direction == .asset }!
+WorthSnapEngine.addAccount(
+    Account(ledgerId: leaveData.ledger.id, name: "TA的隐式负责账户", direction: .asset,
+            typeId: implicitType.id, ownerMemberId: leavingId, responsibleMemberId: nil, sortOrder: 99),
+    to: &leaveData
+)
+let implicitAccountId = leaveData.accounts.first { $0.name == "TA的隐式负责账户" }!.id
 let accountCountBefore = leaveData.accounts.count
 WorthSnapEngine.archiveMember(leavingId, reassignResponsibleTo: leaveData.currentMemberId, in: &leaveData)
 expect(leaveData.accounts.count == accountCountBefore, "成员离开不删除账户（人走数据留）")
 expect(leaveData.members.first { $0.id == leavingId }!.archived, "离开成员被归档")
-expect(!leaveData.accounts.contains { $0.responsibleMemberId == leavingId }, "离开成员的负责账户已转交")
+expect(!leaveData.accounts.contains { $0.responsibleMemberId == leavingId }, "离开成员的显式负责账户已转交")
+// 隐式负责（nil）但归属离开者的账户，也应转交给当前成员，而非仍隐式落在已归档成员身上。
+expect(leaveData.accounts.first { $0.id == implicitAccountId }!.responsibleMemberId == leaveData.currentMemberId,
+       "隐式负责（=归属人）的账户在归属人离开后转交当前成员")
 
 // MARK: - 同步合并（后写覆盖 LWW）
 

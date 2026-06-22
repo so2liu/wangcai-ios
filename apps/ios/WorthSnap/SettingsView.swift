@@ -20,6 +20,8 @@ struct SettingsView: View {
                     get: { store.data.ledger.name },
                     set: {
                         store.data.ledger.name = $0
+                        // 必须 bump updatedAt：同步按 updatedAt 算增量，否则账本改名永远不会推给其他设备。
+                        store.data.ledger.updatedAt = Date()
                         store.save()
                     }
                 ))

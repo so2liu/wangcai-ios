@@ -23,13 +23,37 @@ enum FamilyRole: String {
 final class CloudSyncCoordinator: ObservableObject {
     enum Status: Equatable { case off, syncing, idle, error(String) }
 
+    static let enabledKey = "family.syncEnabled"
+
     @Published private(set) var status: Status = .off
-    @Published private(set) var enabled: Bool = false
+    @Published private(set) var enabled: Bool = UserDefaults.standard.bool(forKey: CloudSyncCoordinator.enabledKey)
+
+    private func setEnabled(_ value: Bool) {
+        enabled = value
+        UserDefaults.standard.set(value, forKey: Self.enabledKey)
+    }
 
     private let container: CKContainer
-    private let zoneID: CKRecordZone.ID
+    /// 发起人/单机自己的 Family zone（私有库）。
+    private let ownerZoneID: CKRecordZone.ID
     private var privateEngine: DatabaseSyncEngine?
     private var sharedEngine: DatabaseSyncEngine?
+
+    /// 受邀者要同步的共享 zone：归发起人所有，从被接受的 CKShare.Metadata 取得后持久化。
+    /// 必须用它而非本机 zone，否则共享库引擎会指向参与者自己的空 zone，永远拉不到家庭数据。
+    private var sharedZoneID: CKRecordZone.ID? {
+        get {
+            let defaults = UserDefaults.standard
+            guard let name = defaults.string(forKey: "family.sharedZone.name"),
+                  let owner = defaults.string(forKey: "family.sharedZone.owner") else { return nil }
+            return CKRecordZone.ID(zoneName: name, ownerName: owner)
+        }
+        set {
+            let defaults = UserDefaults.standard
+            defaults.set(newValue?.zoneName, forKey: "family.sharedZone.name")
+            defaults.set(newValue?.ownerName, forKey: "family.sharedZone.owner")
+        }
+    }
 
     /// 读取 AppStore 当前全量数据（用于 diff 出待上传记录、materialize payload）。
     private let dataProvider: () -> WorthSnapData
@@ -47,8 +71,7 @@ final class CloudSyncCoordinator: ObservableObject {
     init(dataProvider: @escaping () -> WorthSnapData,
          applyRemote: @escaping ([SyncRecord], [String]) -> Void) {
         self.container = CKContainer(identifier: familyContainerID)
-        // owner 的数据放自己私有库；participant 通过共享库访问对方 zone（owner 名也即对方）。
-        self.zoneID = CKRecordZone.ID(zoneName: familyZoneName, ownerName: CKCurrentUserDefaultName)
+        self.ownerZoneID = CKRecordZone.ID(zoneName: familyZoneName, ownerName: CKCurrentUserDefaultName)
         self.dataProvider = dataProvider
         self.applyRemote = applyRemote
     }
@@ -62,7 +85,7 @@ final class CloudSyncCoordinator: ObservableObject {
             status = .error("请先在系统设置登录 iCloud")
             return
         }
-        enabled = true
+        setEnabled(true)
         status = .syncing
         startEngines()
         // 首次开启：建 zone 并把本地全量标记为待上传。
@@ -71,24 +94,43 @@ final class CloudSyncCoordinator: ObservableObject {
         status = .idle
     }
 
+    /// App 启动时恢复同步：之前已开启过的用户无需手动再开。
+    /// 不重新全量推送——CKSyncEngine 的 pending 变更与 change token 已随状态序列化持久化，
+    /// 这里只重建引擎并按当前数据重置指纹，供后续增量 diff 使用。
+    func resume() {
+        guard enabled else { return }
+        status = .syncing
+        startEngines()
+        if let records = try? dataProvider().toSyncRecords() {
+            lastSynced = Dictionary(uniqueKeysWithValues: records.map { ($0.recordName, $0.updatedAt) })
+        }
+        status = .idle
+    }
+
     private func startEngines() {
-        let privateState = SyncStateStore(filename: "cksync-private.state")
-        privateEngine = DatabaseSyncEngine(
-            database: container.privateCloudDatabase, zoneID: zoneID, stateStore: privateState,
-            recordProvider: { [weak self] name in self?.record(named: name) },
-            onRemoteChanges: { [weak self] records, deletions in
-                Task { @MainActor in self?.handleRemoteChanges(records, deletions) }
-            }
-        )
-        // 受邀者：共享库引擎（zone 归对方所有，ownerName 由接受流程确定）。
-        if role == .participant {
-            let sharedState = SyncStateStore(filename: "cksync-shared.state")
-            sharedEngine = DatabaseSyncEngine(
-                database: container.sharedCloudDatabase, zoneID: zoneID, stateStore: sharedState,
+        let onRemote: ([SyncRecord], [String]) -> Void = { [weak self] records, deletions in
+            Task { @MainActor in self?.handleRemoteChanges(records, deletions) }
+        }
+        switch role {
+        case .owner:
+            // 发起人/单机：数据在自己私有库的 Family zone。
+            privateEngine = DatabaseSyncEngine(
+                database: container.privateCloudDatabase, zoneID: ownerZoneID,
+                stateStore: SyncStateStore(filename: "cksync-private.state"),
                 recordProvider: { [weak self] name in self?.record(named: name) },
-                onRemoteChanges: { [weak self] records, deletions in
-                    Task { @MainActor in self?.applyRemote(records, deletions) }
-                }
+                onRemoteChanges: onRemote
+            )
+        case .participant:
+            // 受邀者：数据在共享库里发起人拥有的 zone（来自被接受的邀请），不是本机 zone。
+            guard let sharedZone = sharedZoneID else {
+                status = .error("尚未取得共享家庭信息，请重新接受邀请")
+                return
+            }
+            sharedEngine = DatabaseSyncEngine(
+                database: container.sharedCloudDatabase, zoneID: sharedZone,
+                stateStore: SyncStateStore(filename: "cksync-shared.state"),
+                recordProvider: { [weak self] name in self?.record(named: name) },
+                onRemoteChanges: onRemote
             )
         }
     }
@@ -128,11 +170,11 @@ final class CloudSyncCoordinator: ObservableObject {
     func makeShare() async throws -> (CKShare, CKContainer) {
         role = .owner
         if !enabled { await enable() }
-        let zone = CKRecordZone(zoneID: zoneID)
+        let zone = CKRecordZone(zoneID: ownerZoneID)
         // zone 已存在时 save 幂等。
         _ = try? await container.privateCloudDatabase.save(zone)
 
-        let share = CKShare(recordZoneID: zoneID)
+        let share = CKShare(recordZoneID: ownerZoneID)
         share[CKShare.SystemFieldKey.title] = "旺财 · 家庭账本" as CKRecordValue
         share.publicPermission = .none // 仅被邀请者可访问
         _ = try await container.privateCloudDatabase.save(share)
@@ -142,15 +184,21 @@ final class CloudSyncCoordinator: ObservableObject {
     // MARK: 接受邀请（受邀者）
 
     /// 处理系统回调的 CKShare.Metadata：接受共享、切换为受邀者角色、拉取家庭数据。
-    func acceptShare(_ metadata: CKShare.Metadata) async {
+    /// `clearLocalForJoin` 在首次拉取前清空本地可同步集合（见调用方 AppStore），
+    /// 避免单机旧数据残留并被回传污染共享家庭。
+    func acceptShare(_ metadata: CKShare.Metadata, clearLocalForJoin: @MainActor () -> Void) async {
         do {
             try await container.accept(metadata)
             role = .participant
-            enabled = true
-            // 受邀者本地原有的「单机家庭」让位给共享家庭：清掉本地同步指纹并重建共享引擎，
-            // 全量拉取由 CKSyncEngine 自动完成，远端记录经 merging 合并进 AppStore。
+            setEnabled(true)
+            // 记下共享 zone（归发起人所有）：CKShare 记录所在的 zone 即家庭数据 zone。
+            sharedZoneID = metadata.share.recordID.zoneID
+            // 让位给共享家庭：先清本地单机数据，再清同步指纹、重建共享引擎。
+            clearLocalForJoin()
             lastSynced = [:]
             startEngines()
+            // 把「自己」作为新成员推进家庭（清理后本地仅保留当前成员）。
+            localDidChange(dataProvider())
             status = .idle
         } catch {
             log.error("accept share failed: \(error.localizedDescription)")
