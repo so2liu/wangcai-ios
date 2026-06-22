@@ -71,7 +71,8 @@ final class AppStore: ObservableObject {
         let coordinator = CloudSyncCoordinator(
             dataProvider: { [weak self] in self?.data ?? WorthSnapEngine.seededData() },
             applyRemote: { [weak self] records, deletions in self?.applyRemoteRecords(records, deletions: deletions) },
-            isSafeMode: { [weak self] in self?.loadFailed ?? true }
+            isSafeMode: { [weak self] in self?.loadFailed ?? true },
+            mutateLocal: { [weak self] body in self?.mutateForSync(body) }
         )
         // 把协调器的 @Published（enabled/status）变更转发给 AppStore，
         // 否则只观察 AppStore 的 SettingsView 不会随异步 enable/disable 刷新开关与状态。
@@ -155,6 +156,12 @@ final class AppStore: ObservableObject {
         if !data.snapshots.contains(where: { $0.month == selectedMonth }) {
             selectedMonth = AppStore.latestMonth(in: data)
         }
+        persist()
+    }
+
+    /// 供同步协调器就地修改本地数据并落盘（不触发回推）。用于开启同步时的种子去重等。
+    func mutateForSync(_ body: (inout WorthSnapData) -> Void) {
+        body(&data)
         persist()
     }
 

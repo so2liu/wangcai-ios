@@ -73,6 +73,12 @@ final class CloudSyncCoordinator: ObservableObject {
     /// 是否处于「安全模式」（本地文件解码失败、data 为占位）。安全模式下严禁任何云端写入，
     /// 否则会把占位/示例数据推上云、覆盖云端真实家庭数据。
     private let isSafeMode: () -> Bool
+    /// 就地修改本地数据并落盘（不触发回推）。用于开启同步时清理种子引用数据。
+    private let mutateLocal: ((inout WorthSnapData) -> Void) -> Void
+
+    /// 开启同步期间收集到的远端记录名，用于判断「云端是否已有家庭」并精确去重本地种子。
+    private var collectingRemoteNames = false
+    private var remoteNamesDuringEnable: Set<String> = []
 
     /// 上次已同步的记录指纹（recordName → updatedAt），用于本地改动时算增量。
     private var lastSynced: [String: Date] = [:]
@@ -84,12 +90,14 @@ final class CloudSyncCoordinator: ObservableObject {
 
     init(dataProvider: @escaping () -> WorthSnapData,
          applyRemote: @escaping ([SyncRecord], [String]) -> Void,
-         isSafeMode: @escaping () -> Bool) {
+         isSafeMode: @escaping () -> Bool,
+         mutateLocal: @escaping ((inout WorthSnapData) -> Void) -> Void) {
         self.container = CKContainer(identifier: familyContainerID)
         self.ownerZoneID = CKRecordZone.ID(zoneName: familyZoneName, ownerName: CKCurrentUserDefaultName)
         self.dataProvider = dataProvider
         self.applyRemote = applyRemote
         self.isSafeMode = isSafeMode
+        self.mutateLocal = mutateLocal
     }
 
     // MARK: 开启 / 增量推送
@@ -104,9 +112,42 @@ final class CloudSyncCoordinator: ObservableObject {
         }
         setEnabled(true)
         status = .syncing
+        role = .owner
         startEngines()
-        // 首次开启：建 zone 并把本地全量标记为待上传。
         privateEngine?.ensureZone()
+
+        // 把本地账本时间戳降到最早：让任何远端账本都赢得单例 LWW，
+        // 避免第二台设备用更新的种子账本盖掉家庭账本。首台设备远端为空、无影响。
+        mutateLocal { $0.ledger.updatedAt = .distantPast }
+
+        // 先拉取既有私有 zone：同账号的其他设备可能已建好家庭。
+        let seedNames = Set((try? dataProvider().toSyncRecords())?.map(\.recordName) ?? [])
+        let keepSelfName = dataProvider().currentMemberId.uuidString
+        collectingRemoteNames = true
+        remoteNamesDuringEnable = []
+        await privateEngine?.fetchChanges()
+        // 让拉取过程中派发到主线程的远端合并回调先执行完，再判断云端是否已有家庭。
+        for _ in 0..<3 { await Task.yield() }
+        collectingRemoteNames = false
+
+        if !remoteNamesDuringEnable.isEmpty {
+            // 第二台设备：云端已有家庭。精确删除「只存在于本地种子、远端没有」的引用数据，
+            // 仅保留自己这名成员（其余账本/类型/快照采用远端），避免重复与上传污染。
+            var seedOnly = seedNames.subtracting(remoteNamesDuringEnable)
+            seedOnly.remove(keepSelfName)
+            let drop = seedOnly
+            mutateLocal { data in
+                data.members.removeAll { drop.contains($0.id.uuidString) }
+                data.accounts.removeAll { drop.contains($0.id.uuidString) }
+                data.snapshots.removeAll { drop.contains($0.id.uuidString) }
+                data.entries.removeAll { drop.contains($0.id.uuidString) }
+                data.tags.removeAll { drop.contains($0.id.uuidString) }
+                data.accountTypes.removeAll { drop.contains($0.id.uuidString) }
+            }
+            lastSynced = [:]
+        }
+
+        // 上传本地相对远端的增量：首台设备=全量种子；第二台设备=去重后仅剩的自己等少量记录。
         localDidChange(dataProvider())
         status = .idle
     }
@@ -184,6 +225,9 @@ final class CloudSyncCoordinator: ObservableObject {
 
     /// 远端变更进来：合并进 AppStore，并刷新同步指纹，避免把刚收到的远端记录又回推（回声）。
     private func handleRemoteChanges(_ records: [SyncRecord], _ deletions: [String]) {
+        if collectingRemoteNames {
+            remoteNamesDuringEnable.formUnion(records.map(\.recordName))
+        }
         applyRemote(records, deletions)
         if let refreshed = try? dataProvider().toSyncRecords() {
             lastSynced = Dictionary(uniqueKeysWithValues: refreshed.map { ($0.recordName, $0.updatedAt) })

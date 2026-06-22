@@ -99,6 +99,11 @@ final class DatabaseSyncEngine: NSObject, CKSyncEngineDelegate, @unchecked Senda
         engine.state.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: zoneID))])
     }
 
+    /// 主动拉取一次远端变更（开启同步时先看云端是否已有家庭数据）。
+    func fetchChanges() async {
+        try? await engine.fetchChanges()
+    }
+
     // MARK: CKSyncEngineDelegate
 
     func handleEvent(_ event: CKSyncEngine.Event, syncEngine: CKSyncEngine) async {
