@@ -132,6 +132,11 @@ final class CloudSyncCoordinator: ObservableObject {
     }
 
     private func startEngines() {
+        // 先拆掉两个引擎，确保只有「当前角色」对应的引擎存活。
+        // 否则单机已开同步的设备加入家庭后，旧 privateEngine 仍会从本机 Family zone
+        // 拉回单机旧记录并合并、再被回传污染共享家庭。
+        privateEngine = nil
+        sharedEngine = nil
         let onRemote: ([SyncRecord], [String]) -> Void = { [weak self] records, deletions in
             Task { @MainActor in self?.handleRemoteChanges(records, deletions) }
         }
@@ -198,6 +203,13 @@ final class CloudSyncCoordinator: ObservableObject {
         let zone = CKRecordZone(zoneID: ownerZoneID)
         // zone 已存在时 save 幂等。
         _ = try? await container.privateCloudDatabase.save(zone)
+
+        // 复用已存在的 zone-wide share：再次邀请/管理成员时必须拿现有 share，
+        // 否则为已共享 zone 新建 share 会失败，或弹出不含现有参与者的空 share。
+        let shareID = CKRecord.ID(recordName: CKRecordNameZoneWideShare, zoneID: ownerZoneID)
+        if let existing = try? await container.privateCloudDatabase.record(for: shareID) as? CKShare {
+            return (existing, container)
+        }
 
         let share = CKShare(recordZoneID: ownerZoneID)
         share[CKShare.SystemFieldKey.title] = "旺财 · 家庭账本" as CKRecordValue
