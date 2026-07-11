@@ -81,7 +81,12 @@ public extension WorthSnapData {
         let decoder = WorthSnapStore.makeDecoder()
         var result = self
 
-        for record in remote {
+        // 旧版 CloudKit 的 SnapshotEntry payload 没有冻结账户口径。先合并其余实体，
+        // 尤其是 Account，再处理 Entry，才能用同批次的账户记录安全补齐旧 payload。
+        let orderedRemote = remote.sorted {
+            ($0.recordType == SyncRecordType.entry ? 1 : 0) < ($1.recordType == SyncRecordType.entry ? 1 : 0)
+        }
+        for record in orderedRemote {
             guard let uuid = UUID(uuidString: record.recordName) else { continue }
             switch record.recordType {
             case SyncRecordType.ledger:
@@ -114,7 +119,16 @@ public extension WorthSnapData {
                 let value = try decoder.decode(Snapshot.self, from: record.payload)
                 upsert(&result.snapshots, value, id: \.id, remoteUpdatedAt: record.updatedAt, localUpdatedAt: { $0.updatedAt })
             case SyncRecordType.entry:
-                let value = try decoder.decode(SnapshotEntry.self, from: record.payload)
+                let value: SnapshotEntry
+                do {
+                    value = try decoder.decode(SnapshotEntry.self, from: record.payload)
+                } catch {
+                    // schema v2 及更早的 CloudKit 明细是裸 JSON，不经过磁盘信封迁移。
+                    // 用已合并的账户补齐 v3 新增字段，避免一条旧记录让整批远端数据被丢弃。
+                    let legacy = try decoder.decode(LegacySnapshotEntry.self, from: record.payload)
+                    guard let account = result.accounts.first(where: { $0.id == legacy.accountId }) else { throw error }
+                    value = legacy.upgraded(using: account)
+                }
                 upsert(&result.entries, value, id: \.id, remoteUpdatedAt: record.updatedAt, localUpdatedAt: { $0.updatedAt })
             default:
                 continue
@@ -132,6 +146,28 @@ public extension WorthSnapData {
             result.entries.removeAll { deletedUUIDs.contains($0.id) }
         }
         return result
+    }
+}
+
+/// CloudKit schema v2 及更早版本的 SnapshotEntry 裸 payload。
+private struct LegacySnapshotEntry: Codable {
+    var id: UUID
+    var snapshotId: UUID
+    var accountId: UUID
+    var amount: Decimal
+    var currency: String
+    var exchangeRate: Decimal
+    var convertedAmount: Decimal
+    var confirmed: Bool
+    var note: String
+    var updatedAt: Date
+
+    func upgraded(using account: Account) -> SnapshotEntry {
+        SnapshotEntry(id: id, snapshotId: snapshotId, accountId: accountId, amount: amount,
+                      currency: currency, exchangeRate: exchangeRate, confirmed: confirmed,
+                      note: note, updatedAt: updatedAt, accountName: account.name,
+                      accountDirection: account.direction, accountTypeId: account.typeId,
+                      accountOwnerMemberId: account.ownerMemberId)
     }
 }
 

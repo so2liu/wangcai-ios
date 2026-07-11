@@ -59,7 +59,7 @@ struct SettingsView: View {
                         else { store.cloud.disable() }
                     }
                 )) {
-                    Label("iCloud 同步", systemImage: "icloud")
+                    Label("iCloud 同步（实验）", systemImage: "icloud")
                 }
                 HStack {
                     Text("状态")
@@ -79,7 +79,7 @@ struct SettingsView: View {
             } header: {
                 Text("家庭共享")
             } footer: {
-                Text("开启后家庭账本通过你的 iCloud 私有库同步给受邀成员，数据不经第三方服务器。邀请通过 AirDrop / 信息 / 二维码发送。")
+                Text("实验功能：尚未完成双账号真机验收。开启前请先导出 JSON 备份。家庭账本通过你的 iCloud 私有库同步给受邀成员，数据不经第三方服务器。")
             }
             .wcRow()
             Section("导出") {
@@ -111,7 +111,7 @@ struct SettingsView: View {
             }
             .wcRow()
             Section("隐私") {
-                Text("旺财不连接银行、券商或支付账户；资产数据目前仅保存在本机。iCloud 私有同步为后续计划，启用前数据不会离开你的设备。")
+                Text("旺财不连接银行、券商或支付账户。默认仅保存在本机；开启“iCloud 同步”后，数据会存入你的 iCloud 私有数据库，并可共享给你明确邀请的家庭成员。家庭共享目前为实验功能，正式使用前请先导出 JSON 备份。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

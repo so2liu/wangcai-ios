@@ -3,7 +3,7 @@ import Foundation
 /// 数据结构版本。每次对持久化结构做**不兼容**修改时把 current +1，
 /// 并在 `WorthSnapStore.migrateStep` 里补一条 from→from+1 的升级路径。
 public enum WorthSnapSchema {
-    public static let current = 2
+    public static let current = 3
 }
 
 public enum WorthSnapStoreError: Error, Equatable {
@@ -96,6 +96,8 @@ public enum WorthSnapStore {
         switch version {
         case 1:
             return try v1ToV2(raw)
+        case 2:
+            return try v2ToV3(raw)
         default:
             return raw
         }
@@ -154,6 +156,35 @@ public enum WorthSnapStore {
 
         envelope["data"] = data
         envelope["schemaVersion"] = 2
+        return try JSONSerialization.data(withJSONObject: envelope)
+    }
+
+    /// v2 → v3：把账户当时的名称、方向、类型和归属复制到每条快照明细，冻结历史口径。
+    private static func v2ToV3(_ raw: Data) throws -> Data {
+        guard var envelope = (try? JSONSerialization.jsonObject(with: raw)) as? [String: Any],
+              var data = envelope["data"] as? [String: Any] else {
+            throw WorthSnapStoreError.corrupted(reason: "v2 envelope missing data object")
+        }
+        let accounts = data["accounts"] as? [[String: Any]] ?? []
+        let byId = Dictionary(uniqueKeysWithValues: accounts.compactMap { account -> (String, [String: Any])? in
+            guard let id = account["id"] as? String else { return nil }
+            return (id, account)
+        })
+        var entries = data["entries"] as? [[String: Any]] ?? []
+        for index in entries.indices {
+            guard let accountId = entries[index]["accountId"] as? String,
+                  let account = byId[accountId],
+                  let name = account["name"], let direction = account["direction"], let typeId = account["typeId"] else {
+                throw WorthSnapStoreError.corrupted(reason: "v2 entry references missing account")
+            }
+            entries[index]["accountName"] = name
+            entries[index]["accountDirection"] = direction
+            entries[index]["accountTypeId"] = typeId
+            if let owner = account["ownerMemberId"] { entries[index]["accountOwnerMemberId"] = owner }
+        }
+        data["entries"] = entries
+        envelope["data"] = data
+        envelope["schemaVersion"] = 3
         return try JSONSerialization.data(withJSONObject: envelope)
     }
 }

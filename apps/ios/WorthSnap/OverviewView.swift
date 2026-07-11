@@ -7,14 +7,22 @@ struct OverviewView: View {
 
     var body: some View {
         NavigationStack {
-            let snapshot = store.snapshot()
-            let totals = WorthSnapEngine.totals(for: snapshot, in: store.data)
-            let comparison = WorthSnapEngine.comparison(for: snapshot, in: store.data)
-            let entries = store.entries(for: snapshot)
-            let confirmed = entries.filter(\.confirmed).count
-            let hasAccounts = !store.data.accounts.filter({ !$0.archived }).isEmpty
+            if let snapshot = store.selectedSnapshot {
+                overview(snapshot)
+            } else {
+                ProgressView("正在准备本月快照…")
+                    .task { store.ensureSelectedSnapshot() }
+            }
+        }
+    }
 
-            ScrollView {
+    private func overview(_ snapshot: Snapshot) -> some View {
+        let totals = WorthSnapEngine.totals(for: snapshot, in: store.data)
+        let comparison = WorthSnapEngine.comparison(for: snapshot, in: store.data)
+        let entries = store.entries(for: snapshot)
+        let confirmed = entries.filter(\.confirmed).count
+        let hasAccounts = store.data.accounts.contains { !$0.archived }
+        return ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     header(snapshot: snapshot)
                     NetWorthCard(totals: totals, snapshot: snapshot, ratio: comparison.netWorthRatio)
@@ -42,7 +50,6 @@ struct OverviewView: View {
             .background(WCTheme.background.ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(.hidden, for: .navigationBar)
-        }
     }
 
     /// 仅当账本不是「纯本人单机」时才显示三栏：存在其他成员，或有账户归属他人/共同。
@@ -328,8 +335,8 @@ private struct StructureCard: View {
     private func grouped() -> [(name: String, amount: Decimal)] {
         var totals: [String: Decimal] = [:]
         for entry in store.entries(for: snapshot) {
-            guard let account = store.account(id: entry.accountId), account.direction == .asset else { continue }
-            totals[store.typeName(id: account.typeId), default: 0] += entry.convertedAmount
+            guard entry.accountDirection == .asset else { continue }
+            totals[store.typeName(id: entry.accountTypeId), default: 0] += entry.convertedAmount
         }
         return totals.filter { $0.value > 0 }.sorted { $0.value > $1.value }.map { ($0.key, $0.value) }
     }

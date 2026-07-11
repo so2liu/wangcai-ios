@@ -89,8 +89,8 @@ final class AppStore: ObservableObject {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         url = documents.appendingPathComponent("worthsnap-data.json")
 
-        guard let stored = try? Data(contentsOf: url) else {
-            // 全新安装：没有文件，正常初始化示例数据。
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            // 只有文件确实不存在才是全新安装；读取失败必须进入安全模式。
             let seeded = WorthSnapEngine.seededData()
             data = seeded
             selectedMonth = AppStore.latestMonth(in: seeded)
@@ -98,6 +98,7 @@ final class AppStore: ObservableObject {
         }
 
         do {
+            let stored = try Data(contentsOf: url)
             let decoded = try WorthSnapStore.decode(stored)
             data = decoded
             selectedMonth = AppStore.latestMonth(in: decoded)
@@ -256,19 +257,18 @@ final class AppStore: ObservableObject {
         }
     }
 
-    func snapshot(month: String? = nil) -> Snapshot {
-        let target = month ?? selectedMonth
-        guard WorthSnapEngine.isValidMonth(target) else {
-            let fallback = data.snapshots.filter { WorthSnapEngine.isValidMonth($0.month) }.sorted(by: { $0.month < $1.month }).last?.month ?? WorthSnapEngine.currentMonth()
-            selectedMonth = fallback
-            return snapshot(month: fallback)
-        }
-        if let existing = data.snapshots.first(where: { $0.month == target }) {
-            return existing
-        }
-        let created = WorthSnapEngine.createSnapshot(month: target, in: &data)
+    /// 纯读取，供 SwiftUI body 使用。渲染过程不得创建数据或写盘。
+    var selectedSnapshot: Snapshot? {
+        data.snapshots.first { $0.month == selectedMonth }
+    }
+
+    /// 在明确的生命周期事件或用户操作中确保选中月份存在。
+    func ensureSelectedSnapshot() {
+        let target = WorthSnapEngine.isValidMonth(selectedMonth) ? selectedMonth : AppStore.latestMonth(in: data)
+        selectedMonth = target
+        guard !data.snapshots.contains(where: { $0.month == target }) else { return }
+        _ = WorthSnapEngine.createSnapshot(month: target, in: &data)
         save()
-        return created
     }
 
     var sortedSnapshots: [Snapshot] {
@@ -284,7 +284,7 @@ final class AppStore: ObservableObject {
         let target = offset < 0 ? WorthSnapEngine.previousMonth(current) : WorthSnapEngine.nextMonth(current)
         guard let target else { return }
         selectedMonth = target
-        _ = snapshot(month: target)
+        ensureSelectedSnapshot()
     }
 
     func deleteSnapshot(_ target: Snapshot) {
@@ -293,7 +293,7 @@ final class AppStore: ObservableObject {
         if selectedMonth == target.month {
             selectedMonth = sortedValidSnapshots.first?.month ?? WorthSnapEngine.currentMonth()
             if data.snapshots.isEmpty {
-                _ = snapshot(month: selectedMonth)
+                ensureSelectedSnapshot()
             }
         }
         save()
@@ -315,10 +315,21 @@ final class AppStore: ObservableObject {
         data.accountTypes.first { $0.id == id }?.name ?? "未分类"
     }
 
-    func updateEntry(_ entry: SnapshotEntry, rawAmount: String, confirmed: Bool? = nil) {
-        guard let amount = AmountParser.parse(rawAmount) else { return }
+    @discardableResult
+    func updateEntry(_ entry: SnapshotEntry, rawAmount: String, confirmed: Bool? = nil) -> Bool {
+        guard let amount = AmountParser.parse(rawAmount), entry.exchangeRate > 0 else { return false }
         WorthSnapEngine.updateEntry(entryId: entry.id, amount: amount, confirmed: confirmed, in: &data)
         save()
+        return true
+    }
+
+    @discardableResult
+    func updateExchangeRate(for entry: SnapshotEntry, rawRate: String) -> Bool {
+        guard let rate = AmountParser.parse(rawRate), rate > 0,
+              let snapshot = data.snapshots.first(where: { $0.id == entry.snapshotId }) else { return false }
+        WorthSnapEngine.setExchangeRate(month: snapshot.month, currency: entry.currency, rate: rate, in: &data)
+        save()
+        return true
     }
 
     func confirm(_ entry: SnapshotEntry) {

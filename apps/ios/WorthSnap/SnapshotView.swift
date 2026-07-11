@@ -7,8 +7,17 @@ struct SnapshotView: View {
 
     var body: some View {
         NavigationStack {
-            let snapshot = store.snapshot()
-            Form {
+            if let snapshot = store.selectedSnapshot {
+                snapshotForm(snapshot)
+            } else {
+                ProgressView("正在准备快照…")
+                    .task { store.ensureSelectedSnapshot() }
+            }
+        }
+    }
+
+    private func snapshotForm(_ snapshot: Snapshot) -> some View {
+        Form {
                 Section("月份") {
                     Picker("月份", selection: $store.selectedMonth) {
                         ForEach(store.sortedValidSnapshots) { snapshot in
@@ -45,7 +54,7 @@ struct SnapshotView: View {
                 } else {
                     ForEach(Direction.allCases) { direction in
                         let rows = store.entries(for: snapshot).filter { entry in
-                            store.account(id: entry.accountId)?.direction == direction
+                            entry.accountDirection == direction
                         }
                         if !rows.isEmpty {
                             Section(direction.title) {
@@ -88,7 +97,6 @@ struct SnapshotView: View {
                     }
                 }
             }
-        }
     }
 }
 
@@ -107,22 +115,53 @@ private struct SnapshotEntryRow: View {
     var entry: SnapshotEntry
     var focusedEntryId: FocusState<UUID?>.Binding
     @State private var amountText = ""
+    @State private var rateText = ""
+    @State private var validationMessage: String?
 
     var body: some View {
-        if let account = store.account(id: entry.accountId) {
+        if store.account(id: entry.accountId) != nil {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     VStack(alignment: .leading) {
-                        Text(account.name)
+                        Text(entry.accountName)
                             .font(.body)
                             .foregroundStyle(WCTheme.ink)
-                        Text("\(store.typeName(id: account.typeId)) · \(entry.currency)")
+                        Text("\(store.typeName(id: entry.accountTypeId)) · \(entry.currency)")
                             .font(.caption)
                             .foregroundStyle(WCTheme.inkTertiary)
                     }
                     Spacer()
                     Image(systemName: entry.confirmed ? "checkmark.circle.fill" : "circle")
                         .foregroundStyle(entry.confirmed ? WCTheme.up : WCTheme.inkFaint)
+                }
+                if entry.currency != store.data.ledger.baseCurrency {
+                    HStack {
+                        Text("1 \(entry.currency) =")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        TextField("输入兑 \(store.data.ledger.baseCurrency) 汇率", text: $rateText)
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                        Button("保存汇率") {
+                            let raw = rateText.trimmingCharacters(in: .whitespacesAndNewlines)
+                            if store.updateExchangeRate(for: entry, rawRate: raw) {
+                                rateText = ""
+                                validationMessage = nil
+                            } else {
+                                validationMessage = "请输入大于 0 的有效汇率"
+                            }
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                    if entry.exchangeRate <= 0 {
+                        Label("缺少汇率，该账户暂不计入汇总且不能确认", systemImage: "exclamationmark.triangle")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    } else {
+                        Text("当前汇率：\(entry.exchangeRate.description)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 HStack {
                     TextField(AppFormatters.inputPlaceholder(for: entry.amount, currency: entry.currency), text: $amountText)
@@ -132,13 +171,20 @@ private struct SnapshotEntryRow: View {
                         .focused(focusedEntryId, equals: entry.id)
                     Button {
                         let rawAmount = amountText.trimmingCharacters(in: .whitespacesAndNewlines)
-                        store.updateEntry(entry, rawAmount: rawAmount.isEmpty ? entry.amount.description : rawAmount, confirmed: true)
-                        amountText = ""
-                        focusedEntryId.wrappedValue = nil
+                        if store.updateEntry(entry, rawAmount: rawAmount.isEmpty ? entry.amount.description : rawAmount, confirmed: true) {
+                            amountText = ""
+                            validationMessage = nil
+                            focusedEntryId.wrappedValue = nil
+                        } else {
+                            validationMessage = entry.exchangeRate <= 0 ? "请先设置汇率" : "请输入有效的非负金额"
+                        }
                     } label: {
                         Label("确认", systemImage: "checkmark")
                     }
                     .buttonStyle(.borderless)
+                }
+                if let validationMessage {
+                    Text(validationMessage).font(.caption).foregroundStyle(.red)
                 }
                 Text("折算 \(AppFormatters.money(entry.convertedAmount))")
                     .font(.caption)
