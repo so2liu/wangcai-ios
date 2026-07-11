@@ -119,7 +119,7 @@ private struct SnapshotEntryRow: View {
     @State private var validationMessage: String?
 
     var body: some View {
-        if let account = store.account(id: entry.accountId) {
+        if store.account(id: entry.accountId) != nil {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     VStack(alignment: .leading) {

@@ -302,4 +302,26 @@ expect(afterFresh.accounts.first { $0.id == acc.id }?.name == "远端更新名",
 let afterDelete = try lwwData.merging(remote: [], deletedRecordNames: [acc.id.uuidString])
 expect(!afterDelete.accounts.contains { $0.id == acc.id }, "remote deletion removes local account")
 
+// CloudKit 旧版裸 SnapshotEntry payload 缺少 v3 冻结字段；合并时应由同批 Account 补齐，
+// 且即使 Entry 排在 Account 前面也不能丢弃整批远端数据。
+let legacySource = WorthSnapEngine.sampleData()
+let legacyAccount = legacySource.accounts[0]
+let legacyEntry = legacySource.entries.first { $0.accountId == legacyAccount.id }!
+var legacyEntryJSON = try JSONSerialization.jsonObject(with: WorthSnapStore.makeEncoder().encode(legacyEntry)) as! [String: Any]
+legacyEntryJSON.removeValue(forKey: "accountName")
+legacyEntryJSON.removeValue(forKey: "accountDirection")
+legacyEntryJSON.removeValue(forKey: "accountTypeId")
+legacyEntryJSON.removeValue(forKey: "accountOwnerMemberId")
+let legacyEntryPayload = try JSONSerialization.data(withJSONObject: legacyEntryJSON)
+let legacyRemoteEntry = SyncRecord(recordType: SyncRecordType.entry, recordName: legacyEntry.id.uuidString,
+                                   updatedAt: legacyEntry.updatedAt, payload: legacyEntryPayload)
+let legacyRemoteAccount = SyncRecord(recordType: SyncRecordType.account, recordName: legacyAccount.id.uuidString,
+                                     updatedAt: legacyAccount.updatedAt,
+                                     payload: try WorthSnapStore.makeEncoder().encode(legacyAccount))
+var legacyBlank = WorthSnapEngine.seededData()
+legacyBlank = try legacyBlank.merging(remote: [legacyRemoteEntry, legacyRemoteAccount])
+let upgradedCloudEntry = legacyBlank.entries.first { $0.id == legacyEntry.id }
+expect(upgradedCloudEntry?.accountName == legacyAccount.name, "legacy CloudKit entry backfills frozen account name")
+expect(upgradedCloudEntry?.accountDirection == legacyAccount.direction, "legacy CloudKit entry backfills frozen direction")
+
 print("WorthSnapSharedChecks passed")
