@@ -35,6 +35,33 @@ expect(totals.totalLiabilities == 30, "liability totals")
 expect(totals.netWorth == 170, "net worth")
 expect(data.snapshots.first?.completed == true, "completion")
 
+// 外币缺少汇率时必须显式保持“未折算”，不能按 1:1 混入总资产。
+var fxData = WorthSnapEngine.seededData()
+let fxType = fxData.accountTypes.first { $0.direction == .asset }!
+WorthSnapEngine.addAccount(Account(ledgerId: fxData.ledger.id, name: "美元账户", direction: .asset,
+                                   typeId: fxType.id, currency: "USD"), to: &fxData)
+let fxSnapshot = fxData.snapshots[0]
+let fxEntry = fxData.entries.first { $0.accountId == fxData.accounts[0].id }!
+expect(fxEntry.exchangeRate == 0 && !fxEntry.confirmed, "missing FX rate is explicit and unconfirmed")
+WorthSnapEngine.updateEntry(entryId: fxEntry.id, amount: 100, confirmed: false, in: &fxData)
+expect(WorthSnapEngine.totals(for: fxSnapshot, in: fxData).totalAssets == 0, "missing FX rate contributes no fake 1:1 value")
+WorthSnapEngine.setExchangeRate(month: fxSnapshot.month, currency: "USD", rate: 7.2, in: &fxData)
+expect(WorthSnapEngine.totals(for: fxSnapshot, in: fxData).totalAssets == 720, "manual FX rate recalculates totals")
+
+// 已创建快照冻结账户口径；之后修改账户方向/名称/类型不改写历史。
+var historyData = WorthSnapEngine.sampleData()
+let historicalSnapshot = historyData.snapshots[0]
+let historicalEntry = historyData.entries[0]
+WorthSnapEngine.updateEntry(entryId: historicalEntry.id, amount: 100, confirmed: true, in: &historyData)
+let historicalTotals = WorthSnapEngine.totals(for: historicalSnapshot, in: historyData)
+let historicalName = historicalEntry.accountName
+if let index = historyData.accounts.firstIndex(where: { $0.id == historicalEntry.accountId }) {
+    historyData.accounts[index].name = "后来改名"
+    historyData.accounts[index].direction = .liability
+}
+expect(WorthSnapEngine.totals(for: historicalSnapshot, in: historyData) == historicalTotals, "account edits do not rewrite history")
+expect(historyData.entries[0].accountName == historicalName, "historical account name stays frozen")
+
 let next = WorthSnapEngine.createSnapshot(month: "2099-01", in: &data)
 expect(data.entries.contains { $0.snapshotId == next.id && $0.confirmed == false }, "new snapshot unconfirmed")
 expect(WorthSnapExporter.summaryCSV(data: data).hasPrefix("month,base_currency,total_assets"), "summary csv header")
@@ -132,6 +159,25 @@ let v1Envelope = try JSONSerialization.data(withJSONObject: ["schemaVersion": 1,
 let fromV1 = try WorthSnapStore.decode(v1Envelope)
 expect(fromV1.accounts.count == 3, "v1 envelope decodes all accounts")
 expect(fromV1.members.count == 2, "v1 envelope migration creates two members")
+
+// v2→v3：旧明细会从对应账户补齐冻结口径。
+var v2Object = try JSONSerialization.jsonObject(with: WorthSnapStore.encode(sampleForStore)) as! [String: Any]
+v2Object["schemaVersion"] = 2
+var v2Payload = v2Object["data"] as! [String: Any]
+var v2Entries = v2Payload["entries"] as! [[String: Any]]
+for index in v2Entries.indices {
+    v2Entries[index].removeValue(forKey: "accountName")
+    v2Entries[index].removeValue(forKey: "accountDirection")
+    v2Entries[index].removeValue(forKey: "accountTypeId")
+    v2Entries[index].removeValue(forKey: "accountOwnerMemberId")
+}
+v2Payload["entries"] = v2Entries
+v2Object["data"] = v2Payload
+let fromV2 = try WorthSnapStore.decode(try JSONSerialization.data(withJSONObject: v2Object))
+expect(fromV2.entries.allSatisfy { !$0.accountName.isEmpty }, "v2 migration freezes account names")
+expect(fromV2.entries.allSatisfy { entry in
+    fromV2.accounts.first { $0.id == entry.accountId }?.direction == entry.accountDirection
+}, "v2 migration freezes account directions")
 
 // 损坏文件必须抛错（绝不静默返回空数据）。
 var corruptedThrew = false

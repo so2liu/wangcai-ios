@@ -112,7 +112,7 @@ private struct AccountFormView: View {
             changes.append("币种会从 \(currencyTitle(account.currency)) 改为 \(currencyTitle(normalizedCurrency))。已有快照明细会保留原币种、汇率和折算金额；新的快照会使用新币种。")
         }
         if account.direction != direction {
-            changes.append("方向会从 \(account.direction.title) 改为 \(direction.title)，这会影响历史快照里该账户归入总资产还是总负债。")
+            changes.append("方向会从 \(account.direction.title) 改为 \(direction.title)。修改仅影响之后新建的快照，已有历史保持原口径。")
         }
         return changes.isEmpty ? nil : changes.joined(separator: "\n\n")
     }
@@ -173,7 +173,7 @@ private struct AccountFormView: View {
                 }
                 if case .edit = mode {
                     Section {
-                        Text("修改币种不会重算已有快照；如需调整某个月的币种或汇率，请在该月快照明细里单独处理。修改资产/负债方向会影响历史统计口径。")
+                        Text("修改币种或资产/负债方向只影响之后新建的快照；已有快照会保留当时的币种、汇率、方向和类型。")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }

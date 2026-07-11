@@ -93,11 +93,9 @@ struct TrendView: View {
 
     private func typeTotals() -> [(String, Decimal)] {
         var result: [String: Decimal] = [:]
-        for snapshot in store.data.snapshots {
-            for entry in store.entries(for: snapshot) {
-                guard let account = store.account(id: entry.accountId) else { continue }
-                result[store.typeName(id: account.typeId), default: 0] += entry.convertedAmount
-            }
+        guard let latest = store.sortedValidSnapshots.first else { return [] }
+        for entry in store.entries(for: latest) {
+            result[store.typeName(id: entry.accountTypeId), default: 0] += entry.convertedAmount
         }
         return result.sorted { $0.value > $1.value }
     }

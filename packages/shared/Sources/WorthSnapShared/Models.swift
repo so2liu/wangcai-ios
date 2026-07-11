@@ -169,7 +169,14 @@ public struct SnapshotEntry: Codable, Equatable, Identifiable, Sendable {
     public var note: String
     public var updatedAt: Date
 
-    public init(id: UUID = UUID(), snapshotId: UUID, accountId: UUID, amount: Decimal = 0, currency: String = "CNY", exchangeRate: Decimal = 1, confirmed: Bool = false, note: String = "", updatedAt: Date = Date()) {
+    /// 创建快照时冻结的账户口径。账户之后改名、改类型或在资产/负债之间调整，
+    /// 都不应重写已经发生的历史。
+    public var accountName: String
+    public var accountDirection: Direction
+    public var accountTypeId: UUID
+    public var accountOwnerMemberId: UUID?
+
+    public init(id: UUID = UUID(), snapshotId: UUID, accountId: UUID, amount: Decimal = 0, currency: String = "CNY", exchangeRate: Decimal = 1, confirmed: Bool = false, note: String = "", updatedAt: Date = Date(), accountName: String, accountDirection: Direction, accountTypeId: UUID, accountOwnerMemberId: UUID?) {
         self.id = id
         self.snapshotId = snapshotId
         self.accountId = accountId
@@ -180,6 +187,10 @@ public struct SnapshotEntry: Codable, Equatable, Identifiable, Sendable {
         self.confirmed = confirmed
         self.note = note
         self.updatedAt = updatedAt
+        self.accountName = accountName
+        self.accountDirection = accountDirection
+        self.accountTypeId = accountTypeId
+        self.accountOwnerMemberId = accountOwnerMemberId
     }
 }
 

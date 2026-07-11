@@ -17,79 +17,6 @@ public enum WorthSnapEngine {
         return data
     }
 
-    public static func sampleData(now: Date = Date()) -> WorthSnapData {
-        var data = seededData(now: now)
-        let bank = data.accountTypes.first { $0.name == "银行存款" }!
-        let wallet = data.accountTypes.first { $0.name == "互联网钱包" }!
-        let card = data.accountTypes.first { $0.name == "信用卡" }!
-        [
-            Account(ledgerId: data.ledger.id, name: "测试资产账户", direction: .asset, typeId: bank.id, sortOrder: 0, createdAt: now, updatedAt: now),
-            Account(ledgerId: data.ledger.id, name: "测试钱包账户", direction: .asset, typeId: wallet.id, sortOrder: 1, createdAt: now, updatedAt: now),
-            Account(ledgerId: data.ledger.id, name: "测试负债账户", direction: .liability, typeId: card.id, sortOrder: 2, createdAt: now, updatedAt: now)
-        ].forEach { addAccount($0, to: &data) }
-        return data
-    }
-
-    /// 一份丰满的演示数据：多账户、近 6 个月递增的净资产（整体 +15.3%），当前月部分确认。
-    /// 用于截图、onboarding 预览与设计对比；不用于真实用户首屏。
-    public static func demoData(now: Date = Date()) -> WorthSnapData {
-        var data = seededData(now: now)
-        // 演示「夫妻两人」：本机成员（我）+ 伴侣。
-        let me = data.currentMemberId
-        let partner = Member(name: "TA", colorHex: "E08F6B", createdAt: now, updatedAt: now)
-        data.members.append(partner)
-        func type(_ name: String) -> AccountType { data.accountTypes.first { $0.name == name }! }
-
-        // ownerMemberId 为 nil 表示共同财产。
-        let specs: [(name: String, type: String, owner: UUID?)] = [
-            ("工资卡", "银行存款", me),
-            ("家庭基金", "基金", nil),
-            ("股票账户", "股票/证券", me),
-            ("自住房产", "其他资产", nil),
-            ("微信钱包", "互联网钱包", partner.id),
-            ("信用卡", "信用卡", partner.id),
-            ("房贷", "房贷", nil)
-        ]
-        for (index, spec) in specs.enumerated() {
-            let accountType = type(spec.type)
-            addAccount(
-                Account(ledgerId: data.ledger.id, name: spec.name, direction: accountType.direction,
-                        typeId: accountType.id, ownerMemberId: spec.owner, responsibleMemberId: spec.owner,
-                        sortOrder: index, createdAt: now, updatedAt: now),
-                to: &data
-            )
-        }
-
-        // 末月目标值（元）：资产合计 352.8 万 / 负债 66.4 万 / 净 286.4 万。
-        let target: [String: Decimal] = [
-            "工资卡": 450_000, "家庭基金": 910_000, "股票账户": 900_000,
-            "自住房产": 1_200_000, "微信钱包": 68_000,
-            "信用卡": 28_000, "房贷": 636_000
-        ]
-        // 6 个月缩放系数（首 0.867 → 末 1.0，整体增长约 15.3%）。
-        let factor: [Decimal] = [0.867, 0.89, 0.92, 0.95, 0.975, 1.0]
-
-        var monthsAsc: [String] = []
-        var cursor = currentMonth(date: now)
-        for _ in 0..<6 { monthsAsc.append(cursor); cursor = previousMonth(cursor) ?? cursor }
-        monthsAsc.reverse()
-
-        let current = currentMonth(date: now)
-        let accountsById = Dictionary(uniqueKeysWithValues: data.accounts.map { ($0.id, $0) })
-        for (index, month) in monthsAsc.enumerated() {
-            let snap = createSnapshot(month: month, in: &data)
-            let scale = factor[min(index, factor.count - 1)]
-            for entry in data.entries where entry.snapshotId == snap.id {
-                guard let account = accountsById[entry.accountId] else { continue }
-                let amount = (target[account.name] ?? 0) * scale
-                // 历史月全部确认；当前月留 3 个账户待确认，演示「继续盘点」。
-                let confirmed = month < current ? true : account.sortOrder < 4
-                updateEntry(entryId: entry.id, amount: amount, confirmed: confirmed, in: &data)
-            }
-        }
-        return data
-    }
-
     public static func currentMonth(date: Date = Date(), calendar: Calendar = .current) -> String {
         let comps = calendar.dateComponents([.year, .month], from: date)
         // year/month 对任意 Date 都能取到，?? 仅为可选解包兜底，不是业务默认值。
@@ -143,8 +70,9 @@ public enum WorthSnapEngine {
         for account in data.accounts where !account.archived {
             let previousEntry = previousEntries.first { $0.accountId == account.id }
             let amount = previousEntry?.amount ?? 0
-            let rate = snapshot.exchangeRates[account.currency] ?? 1
-            data.entries.append(SnapshotEntry(snapshotId: snapshot.id, accountId: account.id, amount: amount, currency: account.currency, exchangeRate: rate, confirmed: false))
+            // 本位币永远为 1；外币缺少明确汇率时使用 0 表示“尚未折算”，绝不伪装成 1:1。
+            let rate = account.currency == snapshot.baseCurrency ? 1 : (snapshot.exchangeRates[account.currency] ?? 0)
+            data.entries.append(SnapshotEntry(snapshotId: snapshot.id, accountId: account.id, amount: amount, currency: account.currency, exchangeRate: rate, confirmed: false, accountName: account.name, accountDirection: account.direction, accountTypeId: account.typeId, accountOwnerMemberId: account.ownerMemberId))
         }
         updateCompletion(snapshotId: snapshot.id, in: &data)
         snapshot = data.snapshots.first { $0.id == snapshot.id }!
@@ -155,8 +83,8 @@ public enum WorthSnapEngine {
         data.accounts.append(account)
         for snapshot in data.snapshots {
             let isCurrentOrFuture = snapshot.month >= currentMonth()
-            let rate = snapshot.exchangeRates[account.currency] ?? 1
-            data.entries.append(SnapshotEntry(snapshotId: snapshot.id, accountId: account.id, amount: 0, currency: account.currency, exchangeRate: rate, confirmed: !isCurrentOrFuture))
+            let rate = account.currency == snapshot.baseCurrency ? 1 : (snapshot.exchangeRates[account.currency] ?? 0)
+            data.entries.append(SnapshotEntry(snapshotId: snapshot.id, accountId: account.id, amount: 0, currency: account.currency, exchangeRate: rate, confirmed: !isCurrentOrFuture && rate > 0, accountName: account.name, accountDirection: account.direction, accountTypeId: account.typeId, accountOwnerMemberId: account.ownerMemberId))
             updateCompletion(snapshotId: snapshot.id, in: &data)
         }
     }
@@ -176,9 +104,11 @@ public enum WorthSnapEngine {
         let snapshotId = data.snapshots[snapshotIndex].id
         data.snapshots[snapshotIndex].exchangeRates[currency] = rate
         data.snapshots[snapshotIndex].exchangeRateSource = "手动覆盖"
+        data.snapshots[snapshotIndex].updatedAt = Date()
         for index in data.entries.indices where data.entries[index].snapshotId == snapshotId && data.entries[index].currency == currency {
             data.entries[index].exchangeRate = rate
             data.entries[index].convertedAmount = data.entries[index].amount * rate
+            data.entries[index].updatedAt = Date()
         }
     }
 
@@ -196,8 +126,8 @@ public enum WorthSnapEngine {
         var assets: Decimal = 0
         var liabilities: Decimal = 0
         for entry in entries {
-            guard let account = accountsById[entry.accountId] else { continue }
-            switch account.direction {
+            guard accountsById[entry.accountId] != nil else { continue }
+            switch entry.accountDirection {
             case .asset: assets += entry.convertedAmount
             case .liability: liabilities += entry.convertedAmount
             }
@@ -212,8 +142,10 @@ public enum WorthSnapEngine {
         var assets: Decimal = 0
         var liabilities: Decimal = 0
         for entry in data.entries where entry.snapshotId == snapshot.id {
-            guard let account = accountsById[entry.accountId], data.ownershipView(of: account) == view else { continue }
-            switch account.direction {
+            guard accountsById[entry.accountId] != nil else { continue }
+            let entryView: OwnershipView = entry.accountOwnerMemberId == nil ? .shared : (entry.accountOwnerMemberId == data.currentMemberId ? .mine : .theirs)
+            guard entryView == view else { continue }
+            switch entry.accountDirection {
             case .asset: assets += entry.convertedAmount
             case .liability: liabilities += entry.convertedAmount
             }

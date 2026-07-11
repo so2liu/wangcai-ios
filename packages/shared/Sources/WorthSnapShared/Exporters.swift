@@ -50,10 +50,10 @@ public enum WorthSnapExporter {
             let tagNames = account.tagIds.compactMap { tagsById[$0]?.name }.joined(separator: "|")
             rows.append([
                 snapshot.month,
-                escape(account.name),
-                account.direction.rawValue,
-                escape(typesById[account.typeId]?.name ?? ""),
-                escape(ownerLabel(account.ownerMemberId)),
+                escape(entry.accountName),
+                entry.accountDirection.rawValue,
+                escape(typesById[entry.accountTypeId]?.name ?? ""),
+                escape(ownerLabel(entry.accountOwnerMemberId)),
                 escape(responsibleLabel(account.responsibleMemberId)),
                 escape(tagNames),
                 entry.currency,
