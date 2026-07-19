@@ -23,12 +23,8 @@ struct OverviewView: View {
         let confirmed = entries.filter(\.confirmed).count
         let hasAccounts = store.data.accounts.contains { !$0.archived }
         return ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: WCSpacing.section) {
                     header(snapshot: snapshot)
-
-                    if hasAccounts && !snapshot.completed {
-                        InventoryCard(snapshot: snapshot, confirmed: confirmed, total: entries.count, hasAccounts: hasAccounts)
-                    }
 
                     NetWorthCard(
                         totals: totals,
@@ -37,45 +33,43 @@ struct OverviewView: View {
                         unconfirmedCount: max(entries.count - confirmed, 0)
                     )
 
-                    HStack(spacing: 12) {
-                        MetricTile(title: "总资产", dot: WCTheme.up, value: totals.totalAssets,
-                                   currency: snapshot.baseCurrency, ratio: comparison.assetsRatio)
-                        MetricTile(title: "总负债", dot: WCTheme.down, value: totals.totalLiabilities,
-                                   currency: snapshot.baseCurrency, ratio: comparison.liabilitiesRatio, invertSentiment: true)
+                    VStack(alignment: .leading, spacing: 12) {
+                        WCSectionHeader("资产概览", detail: "较上月")
+                        HStack(spacing: 12) {
+                            MetricTile(title: "总资产", dot: WCTheme.up, value: totals.totalAssets,
+                                       currency: snapshot.baseCurrency, ratio: comparison.assetsRatio)
+                            MetricTile(title: "总负债", dot: WCTheme.down, value: totals.totalLiabilities,
+                                       currency: snapshot.baseCurrency, ratio: comparison.liabilitiesRatio, invertSentiment: true)
+                        }
                     }
 
                     if hasAccounts {
-                        if showsOwnershipBreakdown {
-                            OwnershipBreakdownCard(snapshot: snapshot)
+                        VStack(alignment: .leading, spacing: 12) {
+                            WCSectionHeader("本月变化")
+                            MonthlyChangeCard(snapshot: snapshot)
                         }
-                        if snapshot.completed {
-                            InventoryCard(snapshot: snapshot, confirmed: confirmed, total: entries.count, hasAccounts: hasAccounts)
+                        VStack(alignment: .leading, spacing: 12) {
+                            WCSectionHeader("资产构成", detail: "前三项")
+                            StructureCard(snapshot: snapshot, totalAssets: totals.totalAssets)
                         }
-                        TrendCard(snapshot: snapshot)
-                        StructureCard(snapshot: snapshot, totalAssets: totals.totalAssets)
                     } else {
                         EmptyStateCard()
                     }
                 }
-                .padding(16)
+                .padding(.horizontal, WCSpacing.page)
+                .padding(.vertical, 14)
             }
             .background(WCTheme.background.ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(.hidden, for: .navigationBar)
     }
 
-    /// 仅当账本不是「纯本人单机」时才显示三栏：存在其他成员，或有账户归属他人/共同。
-    private var showsOwnershipBreakdown: Bool {
-        if store.activeMembers.count > 1 { return true }
-        return store.data.accounts.contains { !$0.archived && $0.ownerMemberId != store.data.currentMemberId }
-    }
-
     private func header(snapshot: Snapshot) -> some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("旺财")
-                    .font(WCTypography.hero)
-                    .foregroundStyle(WCTheme.goldDeep)
+                Text("我的净资产")
+                    .font(WCTypography.title)
+                    .foregroundStyle(WCTheme.ink)
                 Text("\(AppFormatters.monthTitle(snapshot.month)) · \(snapshot.completed ? "已完成" : "盘点中")")
                     .font(.subheadline)
                     .foregroundStyle(WCTheme.inkTertiary)
@@ -84,13 +78,12 @@ struct OverviewView: View {
             NavigationLink(destination: SettingsView()) {
                 // 诚实标注为「设置」入口：iCloud 同步尚未实现，不能用带锁的 iCloud
                 // 标签暗示数据已上云，那会误导用户对数据安全的判断。
-                Label("设置", systemImage: "gearshape")
-                    .font(.footnote.weight(.semibold))
+                Image(systemName: "gearshape")
+                    .font(.body.weight(.semibold))
                     .foregroundStyle(WCTheme.goldText)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(.white.opacity(0.7), in: Capsule())
-                    .overlay(Capsule().strokeBorder(WCTheme.gold.opacity(0.25), lineWidth: 0.5))
+                    .frame(width: 40, height: 40)
+                    .background(WCTheme.surface, in: Circle())
+                    .overlay(Circle().strokeBorder(WCTheme.cardStroke, lineWidth: 1))
             }
         }
         .padding(.top, 8)
@@ -128,9 +121,20 @@ private struct NetWorthCard: View {
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(AppFormatters.changeColor(ratio))
             } else if unconfirmedCount > 0 {
-                Label("沿用上月余额，还有 \(unconfirmedCount) 个账户待确认", systemImage: "info.circle")
-                    .font(.footnote.weight(.medium))
+                NavigationLink(destination: SnapshotView()) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "clock")
+                        Text("\(unconfirmedCount) 个账户待确认")
+                        Spacer()
+                        Text("去确认")
+                        Image(systemName: "chevron.right")
+                    }
+                    .font(.footnote.weight(.semibold))
                     .foregroundStyle(WCTheme.goldText)
+                    .padding(.top, 2)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -237,114 +241,52 @@ private struct EmptyStateCard: View {
     }
 }
 
-// MARK: - 本月盘点
+// MARK: - 本月变化摘要
 
-private struct InventoryCard: View {
-    var snapshot: Snapshot
-    var confirmed: Int
-    var total: Int
-    var hasAccounts: Bool
-
-    private var progress: Double { total == 0 ? 0 : Double(confirmed) / Double(total) }
-    private var remaining: Int { max(total - confirmed, 0) }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(remaining > 0 ? "完成本月盘点" : "本月盘点已完成")
-                        .font(.headline).foregroundStyle(WCTheme.ink)
-                    if remaining > 0 {
-                        Text("还有 \(remaining) 个账户，预计 \(max(1, remaining / 3)) 分钟")
-                            .font(.caption).foregroundStyle(WCTheme.inkTertiary)
-                    }
-                }
-                Spacer()
-                Text("\(confirmed) / \(total) 已确认")
-                    .font(.subheadline).foregroundStyle(WCTheme.inkTertiary)
-                    .monospacedDigit()
-            }
-            WCProgressBar(value: progress)
-            HStack {
-                if !hasAccounts {
-                    NavigationLink(destination: AccountsView()) {
-                        Text("先添加第一个账户 →").font(.subheadline.weight(.bold)).foregroundStyle(WCTheme.goldDeep)
-                    }
-                } else {
-                    Text(remaining > 0 ? "确认后生成本月正式结果" : "共确认 \(total) 个账户")
-                        .font(.subheadline).foregroundStyle(WCTheme.inkTertiary)
-                    Spacer()
-                    if remaining > 0 {
-                        NavigationLink(destination: SnapshotView()) {
-                            Text("继续盘点 →").font(.subheadline.weight(.bold)).foregroundStyle(WCTheme.goldDeep)
-                        }
-                    }
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .wcCard()
-    }
-}
-
-// MARK: - 近 6 个月净资产
-
-private struct TrendCard: View {
+private struct MonthlyChangeCard: View {
     @EnvironmentObject private var store: AppStore
     var snapshot: Snapshot
 
-    private var points: [(month: String, value: Double)] {
-        store.data.snapshots
-            .filter { WorthSnapEngine.isValidMonth($0.month) && $0.month <= snapshot.month }
-            .sorted { $0.month < $1.month }
-            .suffix(6)
-            .map { ($0.month, NSDecimalNumber(decimal: WorthSnapEngine.totals(for: $0, in: store.data).netWorth).doubleValue) }
+    private var previousSnapshot: Snapshot? {
+        guard let month = WorthSnapEngine.previousMonth(snapshot.month) else { return nil }
+        return store.data.snapshots.first { $0.month == month }
     }
 
     var body: some View {
-        let data = points
-        let change = WorthSnapEngine.netWorthTrendChange(endingAt: snapshot.month, in: store.data)
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("近 6 个月净资产").font(.headline).foregroundStyle(WCTheme.ink)
-                Spacer()
-                if let change {
-                    Text(AppFormatters.signedPercent(change))
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(AppFormatters.changeColor(change))
-                        .padding(.horizontal, 8).padding(.vertical, 3)
-                        .background(AppFormatters.changeColor(change).opacity(0.12), in: Capsule())
+        let current = WorthSnapEngine.totals(for: snapshot, in: store.data).netWorth
+        let previous = previousSnapshot.map { WorthSnapEngine.totals(for: $0, in: store.data).netWorth }
+        let delta = previous.map { current - $0 }
+        let ratio = previous.flatMap { value -> Double? in
+            guard value != 0 else { return nil }
+            return NSDecimalNumber(decimal: (current - value) / abs(value)).doubleValue
+        }
+        return HStack(spacing: 12) {
+            Image(systemName: delta.map { $0 >= 0 ? "arrow.up.right" : "arrow.down.right" } ?? "minus")
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(ratio.map { AppFormatters.changeColor($0) } ?? WCTheme.inkTertiary)
+                .frame(width: 40, height: 40)
+                .background((ratio.map { AppFormatters.changeColor($0) } ?? WCTheme.inkTertiary).opacity(0.1), in: Circle())
+            VStack(alignment: .leading, spacing: 3) {
+                if let delta, let ratio {
+                    Text("净资产较上月\(delta >= 0 ? "增加" : "减少") \(AppFormatters.symbolized(abs(delta), currency: snapshot.baseCurrency))")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(WCTheme.ink)
+                    Text(AppFormatters.signedPercent(ratio))
+                        .font(.caption)
+                        .foregroundStyle(AppFormatters.changeColor(ratio))
+                } else {
+                    Text("完成下个月盘点后即可查看月度变化")
+                        .font(.subheadline)
+                        .foregroundStyle(WCTheme.inkSecondary)
                 }
             }
-            if data.count > 1 {
-                Chart {
-                    ForEach(Array(data.enumerated()), id: \.offset) { index, point in
-                        LineMark(x: .value("月", index), y: .value("净资产", point.value))
-                            .interpolationMethod(.catmullRom)
-                            .foregroundStyle(WCTheme.gold)
-                            .lineStyle(StrokeStyle(lineWidth: 3, lineCap: .round))
-                        AreaMark(x: .value("月", index), y: .value("净资产", point.value))
-                            .interpolationMethod(.catmullRom)
-                            .foregroundStyle(LinearGradient(colors: [WCTheme.gold.opacity(0.18), .clear], startPoint: .top, endPoint: .bottom))
-                    }
-                }
-                .chartXAxis {
-                    AxisMarks(values: Array(data.indices)) { value in
-                        if let index = value.as(Int.self), index < data.count {
-                            AxisValueLabel { Text(AppFormatters.shortMonth(data[index].month)).font(.caption2).foregroundStyle(WCTheme.inkFaint) }
-                        }
-                    }
-                }
-                .chartYAxis(.hidden)
-                .frame(height: 130)
-            } else {
-                Text("再记录一个月，趋势就出现了。")
-                    .font(.subheadline).foregroundStyle(WCTheme.inkTertiary)
-                    .frame(height: 130, alignment: .center)
-                    .frame(maxWidth: .infinity)
+            Spacer()
+            NavigationLink(destination: TrendView()) {
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(WCTheme.inkFaint)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
         .wcCard()
     }
 }
@@ -362,13 +304,12 @@ private struct StructureCard: View {
             guard entry.accountDirection == .asset else { continue }
             totals[store.typeName(id: entry.accountTypeId), default: 0] += entry.convertedAmount
         }
-        return totals.filter { $0.value > 0 }.sorted { $0.value > $1.value }.map { ($0.key, $0.value) }
+        return totals.filter { $0.value > 0 }.sorted { $0.value > $1.value }.prefix(3).map { ($0.key, $0.value) }
     }
 
     var body: some View {
         let rows = grouped()
         VStack(alignment: .leading, spacing: 14) {
-            Text("资产结构").font(.headline).foregroundStyle(WCTheme.ink)
             if rows.isEmpty {
                 Text("确认账户金额后，这里会显示资产构成。")
                     .font(.subheadline).foregroundStyle(WCTheme.inkTertiary)

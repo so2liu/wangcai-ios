@@ -16,29 +16,31 @@ struct SettingsView: View {
 
     var body: some View {
         List {
-            Section("WorthSnap Lifetime") {
+            Section {
                 if purchases.isPremium {
-                    Label("Lifetime access unlocked", systemImage: "checkmark.seal.fill")
+                    Label("已永久解锁", systemImage: "checkmark.seal.fill")
                         .foregroundStyle(WCTheme.up)
                 } else if store.cloud.isParticipant {
-                    Label("Full access through a shared family", systemImage: "person.2.fill")
+                    Label("已通过家庭共享解锁", systemImage: "person.2.fill")
                         .foregroundStyle(WCTheme.up)
                 } else {
                     Button {
                         purchases.showPaywall = true
                     } label: {
                         HStack {
-                            Label("Unlock the full app", systemImage: "sparkles")
+                            Label("永久解锁完整功能", systemImage: "sparkles")
                             Spacer()
                             Text(purchases.displayPrice).foregroundStyle(.secondary)
                         }
                     }
                 }
-                Button("Restore Purchase") {
+                Button("恢复购买") {
                     Task { await purchases.restorePurchases() }
                 }
+            } header: {
+                Text("永久版")
             } footer: {
-                Text("The free version includes up to 5 accounts and 2 monthly snapshots. Lifetime access is a one-time purchase, not a subscription.")
+                Text("免费版支持 5 个账户和 2 个月度快照。永久版为一次性购买，不是订阅。")
             }
             .wcRow()
             Section("账本") {
@@ -60,63 +62,7 @@ struct SettingsView: View {
                 }
             }
             .wcRow()
-            Section("家庭") {
-                NavigationLink {
-                    MembersView()
-                } label: {
-                    HStack {
-                        Label("家庭成员", systemImage: "person.2")
-                        Spacer()
-                        Text("\(store.activeMembers.count) 人").foregroundStyle(.secondary)
-                    }
-                }
-                Toggle(isOn: Binding(
-                    get: { store.cloud.enabled },
-                    set: { on in
-                        guard purchases.isPremium || store.cloud.isParticipant else {
-                            purchases.showPaywall = true
-                            return
-                        }
-                        if on { Task { await store.cloud.enable() } }
-                        else { store.cloud.disable() }
-                    }
-                )) {
-                    Label("iCloud Family Sync", systemImage: "icloud")
-                }
-                HStack {
-                    Text("Sync Status")
-                    Spacer()
-                    Text(syncStatusText).foregroundStyle(.secondary)
-                }
-                if let lastSyncDate = store.cloud.lastSyncDate {
-                    HStack {
-                        Text("Last Synced")
-                        Spacer()
-                        Text(lastSyncDate, style: .relative).foregroundStyle(.secondary)
-                    }
-                }
-                Button("Sync Now") {
-                    Task { await store.cloud.syncNow() }
-                }
-                .disabled(!store.cloud.enabled)
-                Button {
-                    guard purchases.isPremium else {
-                        purchases.showPaywall = true
-                        return
-                    }
-                    Task { await prepareShare() }
-                } label: {
-                    HStack {
-                        Label(store.cloud.isParticipant ? "Only the family owner can invite members" : "Invite or Manage Family", systemImage: "person.crop.circle.badge.plus")
-                        Spacer()
-                        if preparingShare { ProgressView() }
-                    }
-                }
-                .disabled(preparingShare || store.cloud.isParticipant)
-            } footer: {
-                Text("Family members can view the shared ledger. Account owners manage account details, while the assigned updater confirms the monthly balance. Data is stored in the family owner's private iCloud database.")
-            }
-            .wcRow()
+            familySection
             Section("存储") {
                 Label("数据保存在本机", systemImage: "internaldrive")
                     .foregroundStyle(WCTheme.ink)
@@ -125,20 +71,20 @@ struct SettingsView: View {
             Section("导出") {
                 if purchases.isPremium || store.cloud.isParticipant {
                     ShareLink(item: WorthSnapExporter.summaryCSV(data: store.data), preview: SharePreview("snapshot-summary.csv")) {
-                        Label("Export snapshot summary (CSV)", systemImage: "square.and.arrow.up")
+                        Label("导出月度汇总（CSV）", systemImage: "square.and.arrow.up")
                     }
                     ShareLink(item: WorthSnapExporter.entriesCSV(data: store.data), preview: SharePreview("snapshot-details.csv")) {
-                        Label("Export snapshot details (CSV)", systemImage: "square.and.arrow.up")
+                        Label("导出月度明细（CSV）", systemImage: "square.and.arrow.up")
                     }
                     ShareLink(item: WorthSnapExporter.accountsCSV(data: store.data), preview: SharePreview("accounts.csv")) {
-                        Label("Export accounts (CSV)", systemImage: "square.and.arrow.up")
+                        Label("导出账户列表（CSV）", systemImage: "square.and.arrow.up")
                     }
                 } else {
-                    Button("Unlock CSV export") { purchases.showPaywall = true }
+                    Button("解锁 CSV 导出") { purchases.showPaywall = true }
                 }
                 if let json = try? WorthSnapStore.encode(store.data), let text = String(data: json, encoding: .utf8) {
                     ShareLink(item: text, preview: SharePreview("worthsnap-backup.json")) {
-                        Label("Export complete backup (JSON)", systemImage: "shippingbox")
+                        Label("导出完整备份（JSON）", systemImage: "shippingbox")
                     }
                 }
             }
@@ -154,14 +100,14 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
                 if let familyBackup = store.familyJoinBackupURL {
                     ShareLink(item: familyBackup) {
-                        Label("Export pre-family backup", systemImage: "person.2.badge.gearshape")
+                        Label("导出加入家庭前的备份", systemImage: "person.2.badge.gearshape")
                     }
                 }
             }
             .wcRow()
-            Section("Privacy and Support") {
-                NavigationLink("Privacy and Data") { PrivacyAndDataView() }
-                NavigationLink("Help") { HelpView() }
+            Section("隐私与支持") {
+                NavigationLink("隐私与数据") { PrivacyAndDataView() }
+                NavigationLink("使用帮助") { HelpView() }
             }
             .wcRow()
             Section("关于") {
@@ -172,6 +118,7 @@ struct SettingsView: View {
             .wcRow()
         }
         .wcScreen()
+        .listStyle(.insetGrouped)
         .tint(WCTheme.goldDeep)
         .navigationTitle("设置")
         .sheet(isPresented: Binding(
@@ -220,10 +167,73 @@ struct SettingsView: View {
         }
     }
 
+    private var familySection: some View {
+        Section {
+            NavigationLink {
+                MembersView()
+            } label: {
+                HStack {
+                    Label("家庭成员", systemImage: "person.2")
+                    Spacer()
+                    Text("\(store.activeMembers.count) 人")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Toggle(isOn: Binding(
+                get: { store.cloud.enabled },
+                set: { on in
+                    guard purchases.isPremium || store.cloud.isParticipant else {
+                        purchases.showPaywall = true
+                        return
+                    }
+                    if on { Task { await store.cloud.enable() } }
+                    else { store.cloud.disable() }
+                }
+            )) {
+                Label("iCloud 家庭同步", systemImage: "icloud")
+            }
+            HStack {
+                Text("同步状态")
+                Spacer()
+                Text(syncStatusText).foregroundStyle(.secondary)
+            }
+            if let lastSyncDate = store.cloud.lastSyncDate {
+                HStack {
+                    Text("上次同步")
+                    Spacer()
+                    Text(lastSyncDate, style: .relative).foregroundStyle(.secondary)
+                }
+            }
+            Button("立即同步") {
+                Task { await store.cloud.syncNow() }
+            }
+            .disabled(!store.cloud.enabled)
+            Button {
+                guard purchases.isPremium else {
+                    purchases.showPaywall = true
+                    return
+                }
+                Task { await prepareShare() }
+            } label: {
+                HStack {
+                    Label(store.cloud.isParticipant ? "仅家庭创建者可以邀请成员" : "邀请或管理家庭", systemImage: "person.crop.circle.badge.plus")
+                    Spacer()
+                    if preparingShare { ProgressView() }
+                }
+            }
+            .disabled(preparingShare || store.cloud.isParticipant)
+        } header: {
+            Text("家庭")
+        } footer: {
+            Text("家庭成员可以查看共享账本。账户所有者管理账户信息，指定成员负责确认月度余额。数据保存在家庭创建者的私人 iCloud 数据库中。")
+        }
+        .wcRow()
+    }
+
     private var appVersion: String {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
-        return String(format: String(localized: "Version %@ (%@)"), version, build)
+        return String(format: String(localized: "版本 %@（%@）"), version, build)
     }
 
     private var syncStatusText: String {
@@ -252,43 +262,43 @@ struct SettingsView: View {
 private struct PrivacyAndDataView: View {
     var body: some View {
         List {
-            Section("Your financial data") {
-                Label("WorthSnap never connects to your bank, broker, or payment accounts.", systemImage: "hand.raised")
-                Label("Your ledger is stored locally on this device by default.", systemImage: "internaldrive")
-                Label("The developer cannot see your balances or account names.", systemImage: "eye.slash")
+            Section("你的财务数据") {
+                Label("旺财不会连接银行、券商或支付账户。", systemImage: "hand.raised")
+                Label("账本默认只保存在本机。", systemImage: "internaldrive")
+                Label("开发者无法看到你的余额和账户名称。", systemImage: "eye.slash")
             }
             Section("iCloud") {
-                Text("If you enable iCloud family sync, the ledger is stored in the family owner's private iCloud database and shared only with people the owner explicitly invites. Invited members can view the shared ledger; editing follows account ownership and monthly updater assignments.")
+                Text("开启 iCloud 家庭同步后，账本会保存在家庭创建者的私人 iCloud 数据库中，并且只与明确邀请的成员共享。")
             }
-            Section("Before sharing a backup") {
-                Text("CSV and JSON exports contain sensitive financial information. Store and share them carefully.")
+            Section("分享备份前") {
+                Text("CSV 和 JSON 文件包含敏感财务信息，请谨慎保存和分享。")
             }
-            Section("Important") {
-                Text("WorthSnap is a personal record-keeping tool. It does not provide investment, tax, legal, or financial advice.")
+            Section("重要说明") {
+                Text("旺财是个人记录工具，不提供投资、税务、法律或财务建议。")
             }
         }
-        .navigationTitle("Privacy and Data")
+        .navigationTitle("隐私与数据")
     }
 }
 
 private struct HelpView: View {
     var body: some View {
         List {
-            Section("How it works") {
-                Text("Add the accounts you want to review, enter each current balance, and confirm them once a month. WorthSnap tracks the resulting net worth over time.")
-                Text("For liabilities such as credit cards, enter the amount currently owed as a positive number.")
+            Section("使用方式") {
+                Text("添加需要盘点的账户，每月填写并确认一次当前余额，旺财会持续记录净资产变化。")
+                Text("信用卡等负债账户，请将当前欠款填写为正数。")
             }
-            Section("Free version") {
-                Text("You can use up to 5 accounts and create 2 monthly snapshots for free. Your existing data remains readable if you reach the limit.")
+            Section("免费版") {
+                Text("可以免费使用 5 个账户并创建 2 个月度快照。达到限制后，已有数据仍然可以查看。")
             }
-            Section("Purchases") {
-                Text("Lifetime access is a non-consumable App Store purchase. Use Restore Purchase after changing devices or reinstalling the app.")
+            Section("购买") {
+                Text("永久版是 App Store 非消耗型购买。更换设备或重新安装后，可使用“恢复购买”。")
             }
-            Section("Need assistance?") {
-                Text("A public support URL and contact address must be added before the App Store release.")
+            Section("需要帮助？") {
+                Text("正式发布前需要补充公开的支持网址和联系邮箱。")
                     .foregroundStyle(.secondary)
             }
         }
-        .navigationTitle("Help")
+        .navigationTitle("使用帮助")
     }
 }

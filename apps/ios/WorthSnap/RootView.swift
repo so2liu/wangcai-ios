@@ -22,27 +22,34 @@ struct RootView: View {
         // 锁定亮色暖色主题：旺财是统一的奶油+金棕风格，避免深色模式下
         // 「亮背景 + 深色系统元素」的半吊子冲突。也作用于 sheet 与键盘。
         .preferredColorScheme(.light)
+        .task(id: purchases.isPremium) {
+            store.selectCurrentMonth(
+                createIfMissing: purchases.isPremium
+                    || store.cloud.isParticipant
+                    || store.sortedValidSnapshots.count < PurchaseManager.freeSnapshotLimit
+            )
+        }
         .sheet(isPresented: $purchases.showPaywall) {
             PaywallView()
         }
-        .alert("Purchase", isPresented: Binding(
+        .alert("购买", isPresented: Binding(
             get: { purchases.message != nil },
             set: { if !$0 { purchases.message = nil } }
         )) {
-            Button("OK") { purchases.message = nil }
+            Button("好") { purchases.message = nil }
         } message: {
             Text(purchases.message ?? "")
         }
-        .alert("Join this family ledger?", isPresented: Binding(
+        .alert("加入这个家庭账本？", isPresented: Binding(
             get: { store.pendingFamilyShareMetadata != nil },
             set: { if !$0 { store.declineFamilyShare() } }
         )) {
-            Button("Cancel", role: .cancel) { store.declineFamilyShare() }
-            Button("Back Up and Join") {
+            Button("取消", role: .cancel) { store.declineFamilyShare() }
+            Button("备份并加入") {
                 Task { await store.confirmPendingFamilyShare() }
             }
         } message: {
-            Text("The shared family ledger will replace the ledger currently shown on this device. WorthSnap will automatically save a complete local backup before joining.")
+            Text("共享家庭账本将替换本机当前显示的账本。加入前，旺财会自动保存一份完整的本地备份。")
         }
     }
 
@@ -71,18 +78,18 @@ struct PaywallView: View {
                     Image(systemName: "sparkles.rectangle.stack.fill")
                         .font(.system(size: 46))
                         .foregroundStyle(WCTheme.goldDeep)
-                    Text("Unlock WorthSnap for life")
+                    Text("一次购买，永久使用")
                         .font(WCTypography.hero)
                         .foregroundStyle(WCTheme.ink)
-                    Text("One purchase. No subscription. Keep a complete, private record of your net worth.")
+                    Text("无订阅、无续费。长期、私密地记录你的净资产变化。")
                         .font(.body)
                         .foregroundStyle(WCTheme.inkSecondary)
                     VStack(alignment: .leading, spacing: 15) {
-                        benefit("Unlimited accounts and monthly snapshots", "infinity")
-                        benefit("Private iCloud family sharing", "person.2.fill")
-                        benefit("Complete trends and change analysis", "chart.xyaxis.line")
-                        benefit("CSV reports and advanced insights", "doc.text.magnifyingglass")
-                        benefit("Future premium updates included", "arrow.triangle.2.circlepath")
+                        benefit("无限账户和月度快照", "infinity")
+                        benefit("私密的 iCloud 家庭共享", "person.2.fill")
+                        benefit("完整趋势和变化分析", "chart.xyaxis.line")
+                        benefit("CSV 报表和进阶洞察", "doc.text.magnifyingglass")
+                        benefit("包含未来的高级功能更新", "arrow.triangle.2.circlepath")
                     }
                     .padding(.vertical, 6)
                     Button {
@@ -90,19 +97,19 @@ struct PaywallView: View {
                     } label: {
                         HStack {
                             if purchases.isLoading { ProgressView().tint(.white) }
-                            Text("Buy once · \(purchases.displayPrice)")
+                            Text("永久解锁 · \(purchases.displayPrice)")
                                 .font(.headline)
                         }
                         .foregroundStyle(.white)
                     }
                     .buttonStyle(WCPrimaryButtonStyle())
                     .disabled(purchases.isLoading)
-                    Button("Restore Purchase") {
+                    Button("恢复购买") {
                         Task { await purchases.restorePurchases() }
                     }
                     .frame(maxWidth: .infinity)
                     .foregroundStyle(WCTheme.goldDeep)
-                    Text("Payment is charged to your Apple Account. This is a non-consumable lifetime purchase and does not renew automatically.")
+                    Text("费用将从 Apple 账户扣除。本项目为非消耗型永久购买，不会自动续费。")
                         .font(.caption)
                         .foregroundStyle(WCTheme.inkTertiary)
                         .multilineTextAlignment(.center)
@@ -113,7 +120,7 @@ struct PaywallView: View {
             .background(WCTheme.background.ignoresSafeArea())
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Not Now") { dismiss() }
+                    Button("暂不购买") { dismiss() }
                 }
             }
         }
@@ -225,9 +232,9 @@ private struct FirstRunView: View {
             Text("先勾选常用项目，之后都可以改名或增删。")
                 .foregroundStyle(WCTheme.inkSecondary)
             HStack {
-                Text("Base Currency").foregroundStyle(WCTheme.inkSecondary)
+                Text("本位币").foregroundStyle(WCTheme.inkSecondary)
                 Spacer()
-                Picker("Base Currency", selection: Binding(
+                Picker("本位币", selection: Binding(
                     get: { store.data.ledger.baseCurrency },
                     set: { store.setInitialBaseCurrency($0) }
                 )) {
@@ -273,7 +280,7 @@ private struct FirstRunView: View {
             Text("已选择 \(selectedIds.count) 个账户 · 预计 \(max(1, selectedIds.count / 3)) 分钟完成")
                 .font(.footnote).foregroundStyle(WCTheme.inkTertiary)
             if !purchases.isPremium {
-                Text("The free version includes up to 5 accounts. You can unlock unlimited accounts at any time.")
+                Text("免费版最多可使用 5 个账户，随时可以解锁无限账户。")
                     .font(.caption).foregroundStyle(WCTheme.goldText)
             }
             HStack {
