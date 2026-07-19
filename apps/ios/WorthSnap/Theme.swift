@@ -15,8 +15,10 @@ extension Color {
 /// 旺财暖色（奶油 + 金棕）主题，对齐 `旺财 App.dc.html` 设计稿。
 enum WCTheme {
     // 背景与卡面
-    static let background = Color(hex: 0xFFFDF8)
-    static let cardStroke = Color.white.opacity(0.55)
+    static let background = Color(hex: 0xFAF8F4)
+    static let surface = Color.white
+    static let surfaceMuted = Color(hex: 0xF5F2EC)
+    static let cardStroke = Color(hex: 0xE7E1D8)
 
     // 文字层级
     static let ink = Color(hex: 0x2B2118)
@@ -35,11 +37,11 @@ enum WCTheme {
 
     // 渐变
     static let netCard = LinearGradient(
-        colors: [Color(hex: 0xFFFDF8), Color(hex: 0xFBF2DE)],
+        colors: [Color.white, Color(hex: 0xFCF7ED)],
         startPoint: .topLeading, endPoint: .bottomTrailing
     )
     static let creamCard = LinearGradient(
-        colors: [Color(hex: 0xFBF2DE), Color(hex: 0xEFE6CE)],
+        colors: [Color.white, Color.white],
         startPoint: .topLeading, endPoint: .bottomTrailing
     )
     static let goldFill = LinearGradient(
@@ -62,6 +64,13 @@ enum WCTypography {
     static let caption = Font.system(size: 12, weight: .regular, design: .rounded)
 }
 
+enum WCSpacing {
+    static let page: CGFloat = 20
+    static let section: CGFloat = 24
+    static let card: CGFloat = 16
+    static let row: CGFloat = 12
+}
+
 struct WCPrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -69,7 +78,7 @@ struct WCPrimaryButtonStyle: ButtonStyle {
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
-            .background(WCTheme.goldFill, in: Capsule())
+            .background(WCTheme.goldDeep, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .opacity(configuration.isPressed ? 0.78 : 1)
             .scaleEffect(configuration.isPressed ? 0.985 : 1)
             .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
@@ -83,8 +92,8 @@ struct WCSecondaryButtonStyle: ButtonStyle {
             .foregroundStyle(WCTheme.goldDeep)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 13)
-            .background(.white.opacity(configuration.isPressed ? 0.45 : 0.75), in: Capsule())
-            .overlay(Capsule().stroke(WCTheme.gold.opacity(0.24), lineWidth: 1))
+            .background(WCTheme.surface.opacity(configuration.isPressed ? 0.72 : 1), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(WCTheme.cardStroke, lineWidth: 1))
     }
 }
 
@@ -100,9 +109,33 @@ struct WCCard: ViewModifier {
             .background(fill, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .strokeBorder(WCTheme.cardStroke, lineWidth: 0.5)
+                    .strokeBorder(WCTheme.cardStroke, lineWidth: 1)
             )
-            .shadow(color: WCTheme.gold.opacity(0.10), radius: 14, y: 5)
+            .shadow(color: WCTheme.ink.opacity(0.035), radius: 6, y: 2)
+    }
+}
+
+struct WCSectionHeader: View {
+    let title: LocalizedStringKey
+    var detail: LocalizedStringKey?
+
+    init(_ title: LocalizedStringKey, detail: LocalizedStringKey? = nil) {
+        self.title = title
+        self.detail = detail
+    }
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(title)
+                .font(WCTypography.headline)
+                .foregroundStyle(WCTheme.ink)
+            Spacer()
+            if let detail {
+                Text(detail)
+                    .font(WCTypography.caption)
+                    .foregroundStyle(WCTheme.inkTertiary)
+            }
+        }
     }
 }
 
@@ -119,7 +152,7 @@ extension View {
 
     /// List / Form 行的统一米色背景。
     func wcRow() -> some View {
-        listRowBackground(Color.white.opacity(0.5))
+        listRowBackground(WCTheme.surface)
     }
 
     func wcTitle() -> some View {

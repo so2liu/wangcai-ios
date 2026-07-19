@@ -10,55 +10,58 @@ struct AccountsView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                Section {
-                    Picker("显示范围", selection: $showArchived) {
-                        Text("正在使用").tag(false)
-                        Text("包含归档").tag(true)
+            ScrollView {
+                VStack(alignment: .leading, spacing: WCSpacing.section) {
+                    accountSummary
+
+                    ForEach(Direction.allCases) { direction in
+                        let rows = visibleAccounts.filter { $0.direction == direction }
+                        if !rows.isEmpty {
+                            VStack(alignment: .leading, spacing: 10) {
+                                WCSectionHeader(direction == .asset ? "资产账户" : "负债账户", detail: LocalizedStringKey("\(rows.count) 个"))
+                                VStack(spacing: 0) {
+                                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, account in
+                                        accountRow(account)
+                                        if index < rows.count - 1 {
+                                            Divider().padding(.leading, 48)
+                                        }
+                                    }
+                                }
+                                .wcCard(fill: LinearGradient(colors: [WCTheme.surface, WCTheme.surface], startPoint: .top, endPoint: .bottom), padding: 0)
+                            }
+                        }
                     }
-                    .pickerStyle(.segmented)
+
+                    if visibleAccounts.isEmpty {
+                        ContentUnavailableView("还没有账户", systemImage: "tray", description: Text("添加银行、基金或负债账户，开始每月盘点。"))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 40)
+                    }
+
+                    if archivedCount > 0 {
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                showArchived.toggle()
+                            }
+                        } label: {
+                            HStack {
+                                Image(systemName: "archivebox")
+                                Text(showArchived ? "隐藏已归档账户" : "查看已归档账户（\(archivedCount)）")
+                                Spacer()
+                                Image(systemName: showArchived ? "chevron.up" : "chevron.down")
+                                    .font(.caption.weight(.semibold))
+                            }
+                            .font(.subheadline)
+                            .foregroundStyle(WCTheme.inkSecondary)
+                            .padding(14)
+                            .background(WCTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
-                .wcRow()
-                ForEach(store.data.accounts.filter { showArchived || !$0.archived }.sorted(by: { $0.sortOrder < $1.sortOrder })) { account in
-                    HStack(spacing: 12) {
-                        Circle()
-                            .fill(account.direction == .asset ? WCTheme.up : WCTheme.down)
-                            .frame(width: 8, height: 8)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(account.name)
-                                .font(.headline)
-                                .foregroundStyle(WCTheme.ink)
-                            Text(accountSubtitle(account))
-                                .font(.caption)
-                                .foregroundStyle(WCTheme.inkTertiary)
-                        }
-                        Spacer()
-                        if account.archived {
-                            Text("已归档")
-                                .font(.caption)
-                                .foregroundStyle(WCTheme.inkFaint)
-                        } else if !store.canManage(account) {
-                            Label("View only", systemImage: "lock")
-                                .font(.caption)
-                                .foregroundStyle(WCTheme.inkFaint)
-                        }
-                    }
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        if store.canManage(account) { editingAccount = account }
-                    }
-                    .wcRow()
-                    .swipeActions {
-                        if store.canManage(account) {
-                        Button(account.archived ? "恢复" : "归档") {
-                            store.toggleArchive(account: account)
-                        }
-                        .tint(account.archived ? WCTheme.up : WCTheme.gold)
-                        }
-                    }
-                }
+                .padding(WCSpacing.page)
             }
-            .wcScreen()
+            .background(WCTheme.background.ignoresSafeArea())
             .navigationTitle("账户")
             .toolbar {
                 Button {
@@ -68,22 +71,66 @@ struct AccountsView: View {
                         purchases.showPaywall = true
                     }
                 } label: {
-                    Image(systemName: "plus")
+                    Label("添加账户", systemImage: "plus")
                 }
             }
-            .safeAreaInset(edge: .bottom) {
-                if !purchases.isPremium && !store.cloud.isParticipant {
-                    Text("Free: \(store.data.accounts.count) / \(PurchaseManager.freeAccountLimit) accounts")
-                        .font(.caption)
-                        .foregroundStyle(WCTheme.inkTertiary)
-                        .padding(.vertical, 6)
+            .sheet(isPresented: $showingAdd) { AccountFormView(mode: .add) }
+            .sheet(item: $editingAccount) { account in AccountFormView(mode: .edit(account)) }
+        }
+    }
+
+    private var visibleAccounts: [Account] {
+        store.data.accounts
+            .filter { showArchived || !$0.archived }
+            .sorted { $0.sortOrder < $1.sortOrder }
+    }
+
+    private var archivedCount: Int {
+        store.data.accounts.filter(\.archived).count
+    }
+
+    private var accountSummary: some View {
+        HStack(spacing: 0) {
+            summaryValue("资产", count: store.data.accounts.filter { !$0.archived && $0.direction == .asset }.count, color: WCTheme.up)
+            Divider().frame(height: 42)
+            summaryValue("负债", count: store.data.accounts.filter { !$0.archived && $0.direction == .liability }.count, color: WCTheme.down)
+        }
+        .wcCard(fill: WCTheme.netCard)
+    }
+
+    private func summaryValue(_ title: LocalizedStringKey, count: Int, color: Color) -> some View {
+        VStack(spacing: 4) {
+            Text("\(count)").font(.system(size: 26, weight: .bold, design: .rounded)).foregroundStyle(color)
+            Text(title).font(.caption).foregroundStyle(WCTheme.inkSecondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func accountRow(_ account: Account) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: account.direction == .asset ? "arrow.up.right.circle.fill" : "arrow.down.right.circle.fill")
+                .font(.title3)
+                .foregroundStyle(account.direction == .asset ? WCTheme.up : WCTheme.down)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(account.name).font(WCTypography.headline).foregroundStyle(WCTheme.ink)
+                Text(accountSubtitle(account)).font(WCTypography.caption).foregroundStyle(WCTheme.inkTertiary)
+            }
+            Spacer()
+            if account.archived {
+                Text("已归档").font(.caption).foregroundStyle(WCTheme.inkFaint)
+            } else {
+                Image(systemName: store.canManage(account) ? "chevron.right" : "lock")
+                    .font(.caption.weight(.semibold)).foregroundStyle(WCTheme.inkFaint)
+            }
+        }
+        .padding(16)
+        .contentShape(Rectangle())
+        .onTapGesture { if store.canManage(account) { editingAccount = account } }
+        .contextMenu {
+            if store.canManage(account) {
+                Button(account.archived ? "恢复" : "归档") {
+                    store.toggleArchive(account: account)
                 }
-            }
-            .sheet(isPresented: $showingAdd) {
-                AccountFormView(mode: .add)
-            }
-            .sheet(item: $editingAccount) { account in
-                AccountFormView(mode: .edit(account))
             }
         }
     }
@@ -207,7 +254,7 @@ private struct AccountFormView: View {
                     }
                 }
                 if store.activeMembers.count > 1 {
-                    Section("家庭协作") {
+                    Section {
                         Picker("归属", selection: $ownerMemberId) {
                             ForEach(store.activeMembers) { member in
                                 Text(member.name).tag(Optional(member.id))
@@ -220,6 +267,8 @@ private struct AccountFormView: View {
                                 Text(member.name).tag(Optional(member.id))
                             }
                         }
+                    } header: {
+                        Text("家庭协作")
                     } footer: {
                         Text("归属仅用于在账本中区分“我的、TA 的、共同”，不代表法律上的财产归属。")
                     }

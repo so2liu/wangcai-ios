@@ -15,11 +15,11 @@ struct TrendView: View {
 
     var body: some View {
         NavigationStack {
-            List {
+            ScrollView {
+                VStack(alignment: .leading, spacing: WCSpacing.section) {
                 if trendPoints.count > 1 {
-                    Section {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("月度净资产变化").font(.subheadline.weight(.semibold)).foregroundStyle(WCTheme.inkSecondary)
+                    VStack(alignment: .leading, spacing: 12) {
+                            WCSectionHeader("净资产趋势", detail: LocalizedStringKey("\(trendPoints.count) 个月"))
                             Chart {
                                 ForEach(Array(trendPoints.enumerated()), id: \.offset) { index, point in
                                     LineMark(x: .value("月", index), y: .value("净资产", point.value))
@@ -50,70 +50,30 @@ struct TrendView: View {
                                     }
                                 }
                             }
-                            .frame(height: 140)
-                        }
-                        .padding(.vertical, 4)
+                            .frame(height: 180)
                     }
-                    .wcRow()
+                    .wcCard()
                 }
-                Section("趋势") {
-                    ForEach(store.sortedSnapshots) { snapshot in
-                        let totals = WorthSnapEngine.totals(for: snapshot, in: store.data)
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Text(AppFormatters.monthTitle(snapshot.month))
-                                    .font(.headline)
-                                    .foregroundStyle(WCTheme.ink)
-                                if !WorthSnapEngine.isValidMonth(snapshot.month) {
-                                    Text("异常")
-                                        .font(.caption)
-                                        .foregroundStyle(WCTheme.down)
+                VStack(alignment: .leading, spacing: 10) {
+                    WCSectionHeader("月度记录", detail: "长按可删除")
+                    VStack(spacing: 0) {
+                        ForEach(Array(store.sortedSnapshots.enumerated()), id: \.element.id) { index, snapshot in
+                            snapshotRow(snapshot)
+                                .padding(16)
+                                .contextMenu {
+                                    Button("删除这个月", role: .destructive) { pendingDelete = snapshot }
                                 }
-                                Spacer()
-                                Text(AppFormatters.symbolized(totals.netWorth, currency: snapshot.baseCurrency))
-                                    .font(.body.weight(.semibold))
-                                    .foregroundStyle(WCTheme.ink)
+                            if index < store.sortedSnapshots.count - 1 {
+                                Divider().padding(.leading, 16)
                             }
-                            HStack {
-                                Label(AppFormatters.symbolized(totals.totalAssets, currency: snapshot.baseCurrency), systemImage: "arrow.up.right")
-                                    .foregroundStyle(WCTheme.up)
-                                Spacer()
-                                Label(AppFormatters.symbolized(totals.totalLiabilities, currency: snapshot.baseCurrency), systemImage: "arrow.down.right")
-                                    .foregroundStyle(WCTheme.down)
-                            }
-                            .font(.caption)
                         }
                     }
-                    .onDelete { offsets in
-                        let snapshots = store.sortedSnapshots
-                        pendingDelete = offsets.first.map { snapshots[$0] }
-                    }
+                    .wcCard(padding: 0)
                 }
-                .wcRow()
-                Section("资产构成") {
-                    ForEach(typeTotals(direction: .asset), id: \.0) { name, amount in
-                        HStack {
-                            Text(name).foregroundStyle(WCTheme.inkSecondary)
-                            Spacer()
-                            Text(AppFormatters.symbolized(amount, currency: store.data.ledger.baseCurrency))
-                                .foregroundStyle(WCTheme.inkTertiary)
-                        }
-                    }
                 }
-                .wcRow()
-                Section("负债构成") {
-                    ForEach(typeTotals(direction: .liability), id: \.0) { name, amount in
-                        HStack {
-                            Text(name).foregroundStyle(WCTheme.inkSecondary)
-                            Spacer()
-                            Text(AppFormatters.symbolized(amount, currency: store.data.ledger.baseCurrency))
-                                .foregroundStyle(WCTheme.inkTertiary)
-                        }
-                    }
-                }
-                .wcRow()
+                .padding(WCSpacing.page)
             }
-            .wcScreen()
+            .background(WCTheme.background.ignoresSafeArea())
             .tint(WCTheme.goldDeep)
             .navigationTitle("资产变化")
             .alert("删除整月记录？", isPresented: Binding(
@@ -131,12 +91,25 @@ struct TrendView: View {
         }
     }
 
-    private func typeTotals(direction: Direction) -> [(String, Decimal)] {
-        var result: [String: Decimal] = [:]
-        guard let latest = store.sortedValidSnapshots.first else { return [] }
-        for entry in store.entries(for: latest) where entry.accountDirection == direction {
-            result[store.typeName(id: entry.accountTypeId), default: 0] += entry.convertedAmount
+    private func snapshotRow(_ snapshot: Snapshot) -> some View {
+        let totals = WorthSnapEngine.totals(for: snapshot, in: store.data)
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(AppFormatters.monthTitle(snapshot.month))
+                    .font(WCTypography.headline)
+                    .foregroundStyle(WCTheme.ink)
+                Spacer()
+                Text(AppFormatters.symbolized(totals.netWorth, currency: snapshot.baseCurrency))
+                    .font(.subheadline.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(WCTheme.ink)
+            }
+            HStack(spacing: 16) {
+                Text("资产 \(AppFormatters.symbolized(totals.totalAssets, currency: snapshot.baseCurrency))")
+                Text("负债 \(AppFormatters.symbolized(totals.totalLiabilities, currency: snapshot.baseCurrency))")
+            }
+            .font(.caption.monospacedDigit())
+            .foregroundStyle(WCTheme.inkSecondary)
         }
-        return result.sorted { $0.value > $1.value }
     }
+
 }

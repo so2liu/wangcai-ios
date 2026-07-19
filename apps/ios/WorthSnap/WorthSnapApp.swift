@@ -427,6 +427,17 @@ final class AppStore: ObservableObject {
         save()
     }
 
+    /// 启动时优先展示真实的当前月份；是否允许新建由调用方根据购买权益决定。
+    func selectCurrentMonth(createIfMissing: Bool) {
+        let current = WorthSnapEngine.currentMonth()
+        if data.snapshots.contains(where: { $0.month == current }) {
+            selectedMonth = current
+        } else if createIfMissing {
+            selectedMonth = current
+            ensureSelectedSnapshot()
+        }
+    }
+
     var sortedSnapshots: [Snapshot] {
         data.snapshots.sorted { $0.month > $1.month }
     }
