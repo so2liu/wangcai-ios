@@ -4,7 +4,7 @@ import CloudKit
 import os
 import WorthSnapShared
 
-// ⚠️ 同 CloudSync.swift：CKShare 邀请/接受流程的完整实现，但未经真机验证。
+// CKShare 邀请/接受流程。发布前必须按 docs/cloudkit-sharing-testing.md 完成双账号真机验收。
 
 private let log = Logger(subsystem: "com.yueyu.WorthSnap", category: "FamilySharing")
 
@@ -38,6 +38,7 @@ final class CloudSyncCoordinator: ObservableObject {
 
     @Published private(set) var status: Status = .off
     @Published private(set) var enabled: Bool = UserDefaults.standard.bool(forKey: CloudSyncCoordinator.enabledKey)
+    @Published private(set) var lastSyncDate: Date?
 
     private func setEnabled(_ value: Bool) {
         enabled = value
@@ -88,6 +89,8 @@ final class CloudSyncCoordinator: ObservableObject {
         set { UserDefaults.standard.set(newValue.rawValue, forKey: "family.role") }
     }
 
+    var isParticipant: Bool { role == .participant }
+
     init(dataProvider: @escaping () -> WorthSnapData,
          applyRemote: @escaping ([SyncRecord], [String]) -> Void,
          isSafeMode: @escaping () -> Bool,
@@ -112,8 +115,14 @@ final class CloudSyncCoordinator: ObservableObject {
         }
         setEnabled(true)
         status = .syncing
-        role = .owner
         startEngines()
+        if role == .participant {
+            await sharedEngine?.fetchChanges()
+            localDidChange(dataProvider())
+            status = .idle
+            lastSyncDate = Date()
+            return
+        }
         privateEngine?.ensureZone()
 
         // 把本地账本时间戳降到最早：让任何远端账本都赢得单例 LWW，
@@ -150,6 +159,7 @@ final class CloudSyncCoordinator: ObservableObject {
         // 上传本地相对远端的增量：首台设备=全量种子；第二台设备=去重后仅剩的自己等少量记录。
         localDidChange(dataProvider())
         status = .idle
+        lastSyncDate = Date()
     }
 
     /// 关闭 iCloud 同步：持久化为关闭、停掉引擎，之后本地改动不再上行、也不再拉取。
@@ -172,6 +182,7 @@ final class CloudSyncCoordinator: ObservableObject {
             lastSynced = Dictionary(uniqueKeysWithValues: records.map { ($0.recordName, $0.updatedAt) })
         }
         status = .idle
+        lastSyncDate = Date()
     }
 
     private func startEngines() {
@@ -183,6 +194,11 @@ final class CloudSyncCoordinator: ObservableObject {
         let onRemote: ([SyncRecord], [String]) -> Void = { [weak self] records, deletions in
             Task { @MainActor in self?.handleRemoteChanges(records, deletions) }
         }
+        let onZoneDeleted: () -> Void = { [weak self] in
+            Task { @MainActor in
+                self?.status = .error(String(localized: "This family share is no longer available. Your last local copy is still on this device."))
+            }
+        }
         switch role {
         case .owner:
             // 发起人/单机：数据在自己私有库的 Family zone。
@@ -190,7 +206,8 @@ final class CloudSyncCoordinator: ObservableObject {
                 database: container.privateCloudDatabase, zoneID: ownerZoneID,
                 stateStore: SyncStateStore(filename: "cksync-private.state"),
                 recordProvider: { [weak self] name in self?.record(named: name) },
-                onRemoteChanges: onRemote
+                onRemoteChanges: onRemote,
+                onZoneDeleted: onZoneDeleted
             )
         case .participant:
             // 受邀者：数据在共享库里发起人拥有的 zone（来自被接受的邀请），不是本机 zone。
@@ -202,7 +219,8 @@ final class CloudSyncCoordinator: ObservableObject {
                 database: container.sharedCloudDatabase, zoneID: sharedZone,
                 stateStore: SyncStateStore(filename: "cksync-shared.state"),
                 recordProvider: { [weak self] name in self?.record(named: name) },
-                onRemoteChanges: onRemote
+                onRemoteChanges: onRemote,
+                onZoneDeleted: onZoneDeleted
             )
         }
     }
@@ -232,6 +250,17 @@ final class CloudSyncCoordinator: ObservableObject {
         if let refreshed = try? dataProvider().toSyncRecords() {
             lastSynced = Dictionary(uniqueKeysWithValues: refreshed.map { ($0.recordName, $0.updatedAt) })
         }
+        lastSyncDate = Date()
+    }
+
+    /// 用户主动刷新；弱网或静默推送延迟时提供可理解的恢复动作。
+    func syncNow() async {
+        guard enabled, !isSafeMode() else { return }
+        status = .syncing
+        if role == .participant { await sharedEngine?.fetchChanges() }
+        else { await privateEngine?.fetchChanges() }
+        status = .idle
+        lastSyncDate = Date()
     }
 
     /// 为指定 recordName materialize 当前 payload。
@@ -262,7 +291,7 @@ final class CloudSyncCoordinator: ObservableObject {
         }
 
         let share = CKShare(recordZoneID: ownerZoneID)
-        share[CKShare.SystemFieldKey.title] = "旺财 · 家庭账本" as CKRecordValue
+        share[CKShare.SystemFieldKey.title] = String(localized: "WorthSnap Family Ledger") as CKRecordValue
         share.publicPermission = .none // 仅被邀请者可访问
         _ = try await container.privateCloudDatabase.save(share)
         return (share, container)
@@ -287,6 +316,7 @@ final class CloudSyncCoordinator: ObservableObject {
             // 把「自己」作为新成员推进家庭（清理后本地仅保留当前成员）。
             localDidChange(dataProvider())
             status = .idle
+            lastSyncDate = Date()
         } catch {
             log.error("accept share failed: \(error.localizedDescription)")
             status = .error("接受邀请失败：\(error.localizedDescription)")
@@ -317,6 +347,6 @@ struct FamilyShareSheet: UIViewControllerRepresentable {
         func cloudSharingController(_ csc: UICloudSharingController, failedToSaveShareWithError error: Error) {
             log.error("share save failed: \(error.localizedDescription)")
         }
-        func itemTitle(for csc: UICloudSharingController) -> String? { "旺财 · 家庭账本" }
+        func itemTitle(for csc: UICloudSharingController) -> String? { String(localized: "WorthSnap Family Ledger") }
     }
 }

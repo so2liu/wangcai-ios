@@ -30,6 +30,7 @@ targets:
         MARKETING_VERSION: 1.0
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: 旺财
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         # CloudKit 共享需后台远程通知，用于接收 zone 变更推送。
         INFOPLIST_KEY_UIBackgroundModes: remote-notification
         INFOPLIST_KEY_UILaunchScreen_Generation: YES

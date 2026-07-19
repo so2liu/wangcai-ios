@@ -3,6 +3,7 @@ import WorthSnapShared
 
 struct AccountsView: View {
     @EnvironmentObject private var store: AppStore
+    @EnvironmentObject private var purchases: PurchaseManager
     @State private var showingAdd = false
     @State private var editingAccount: Account?
     @State private var showArchived = false
@@ -10,8 +11,14 @@ struct AccountsView: View {
     var body: some View {
         NavigationStack {
             List {
-                Toggle("显示归档账户", isOn: $showArchived)
-                    .wcRow()
+                Section {
+                    Picker("显示范围", selection: $showArchived) {
+                        Text("正在使用").tag(false)
+                        Text("包含归档").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                }
+                .wcRow()
                 ForEach(store.data.accounts.filter { showArchived || !$0.archived }.sorted(by: { $0.sortOrder < $1.sortOrder })) { account in
                     HStack(spacing: 12) {
                         Circle()
@@ -21,7 +28,7 @@ struct AccountsView: View {
                             Text(account.name)
                                 .font(.headline)
                                 .foregroundStyle(WCTheme.ink)
-                            Text("\(account.direction.title) · \(store.typeName(id: account.typeId)) · \(account.currency) · \(store.memberName(id: account.ownerMemberId))")
+                            Text(accountSubtitle(account))
                                 .font(.caption)
                                 .foregroundStyle(WCTheme.inkTertiary)
                         }
@@ -30,18 +37,24 @@ struct AccountsView: View {
                             Text("已归档")
                                 .font(.caption)
                                 .foregroundStyle(WCTheme.inkFaint)
+                        } else if !store.canManage(account) {
+                            Label("View only", systemImage: "lock")
+                                .font(.caption)
+                                .foregroundStyle(WCTheme.inkFaint)
                         }
                     }
                     .contentShape(Rectangle())
                     .onTapGesture {
-                        editingAccount = account
+                        if store.canManage(account) { editingAccount = account }
                     }
                     .wcRow()
                     .swipeActions {
+                        if store.canManage(account) {
                         Button(account.archived ? "恢复" : "归档") {
                             store.toggleArchive(account: account)
                         }
                         .tint(account.archived ? WCTheme.up : WCTheme.gold)
+                        }
                     }
                 }
             }
@@ -49,9 +62,21 @@ struct AccountsView: View {
             .navigationTitle("账户")
             .toolbar {
                 Button {
-                    showingAdd = true
+                    if purchases.isPremium || store.cloud.isParticipant || store.data.accounts.count < PurchaseManager.freeAccountLimit {
+                        showingAdd = true
+                    } else {
+                        purchases.showPaywall = true
+                    }
                 } label: {
                     Image(systemName: "plus")
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                if !purchases.isPremium && !store.cloud.isParticipant {
+                    Text("Free: \(store.data.accounts.count) / \(PurchaseManager.freeAccountLimit) accounts")
+                        .font(.caption)
+                        .foregroundStyle(WCTheme.inkTertiary)
+                        .padding(.vertical, 6)
                 }
             }
             .sheet(isPresented: $showingAdd) {
@@ -61,6 +86,14 @@ struct AccountsView: View {
                 AccountFormView(mode: .edit(account))
             }
         }
+    }
+
+    private func accountSubtitle(_ account: Account) -> String {
+        var parts = [store.typeName(id: account.typeId), account.currency]
+        if store.activeMembers.count > 1 {
+            parts.append(store.memberName(id: account.ownerMemberId))
+        }
+        return parts.joined(separator: " · ")
     }
 }
 
@@ -89,6 +122,7 @@ private struct AccountFormView: View {
     @State private var ownerMemberId: UUID?
     @State private var responsibleMemberId: UUID?
     @State private var selectedTypeId: UUID?
+    @State private var initialAmountText = ""
     @State private var pendingSensitiveSave = false
     @State private var didDefaultOwner = false
 
@@ -159,16 +193,35 @@ private struct AccountFormView: View {
                         Text(currencyTitle(code)).tag(code)
                     }
                 }
-                Picker("归属", selection: $ownerMemberId) {
-                    ForEach(store.activeMembers) { member in
-                        Text(member.name).tag(Optional(member.id))
+                if case .add = mode {
+                    Section("本月余额（可选）") {
+                        if normalizedCurrency == store.data.ledger.baseCurrency {
+                            TextField(direction == .asset ? "当前余额，例如 12.3万" : "当前待还，例如 3200", text: $initialAmountText)
+                                .keyboardType(.decimalPad)
+                                .keyboardDismissToolbar()
+                        } else {
+                            Text("外币账户保存后，请在月度盘点中先设置汇率，再填写余额。")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
                     }
-                    Text("共同").tag(UUID?.none)
                 }
-                Picker("负责人", selection: $responsibleMemberId) {
-                    Text("未指定（归属人）").tag(UUID?.none)
-                    ForEach(store.activeMembers) { member in
-                        Text(member.name).tag(Optional(member.id))
+                if store.activeMembers.count > 1 {
+                    Section("家庭协作") {
+                        Picker("归属", selection: $ownerMemberId) {
+                            ForEach(store.activeMembers) { member in
+                                Text(member.name).tag(Optional(member.id))
+                            }
+                            Text("共同").tag(UUID?.none)
+                        }
+                        Picker("每月由谁更新", selection: $responsibleMemberId) {
+                            Text("未指定（归属人）").tag(UUID?.none)
+                            ForEach(store.activeMembers) { member in
+                                Text(member.name).tag(Optional(member.id))
+                            }
+                        }
+                    } footer: {
+                        Text("归属仅用于在账本中区分“我的、TA 的、共同”，不代表法律上的财产归属。")
                     }
                 }
                 if case .edit = mode {
@@ -223,7 +276,9 @@ private struct AccountFormView: View {
         let typeId = selectedTypeId ?? filteredTypes.first!.id
         switch mode {
         case .add:
-            store.addAccount(name: name, direction: direction, typeId: typeId, currency: normalizedCurrency, ownerMemberId: ownerMemberId, responsibleMemberId: responsibleMemberId)
+            let raw = initialAmountText.trimmingCharacters(in: .whitespacesAndNewlines)
+            let initialAmount = raw.isEmpty ? nil : AmountParser.parse(raw)
+            store.addAccount(name: name, direction: direction, typeId: typeId, currency: normalizedCurrency, ownerMemberId: ownerMemberId, responsibleMemberId: responsibleMemberId, initialAmount: initialAmount)
         case .edit(let account):
             store.updateAccount(account, name: name, direction: direction, typeId: typeId, currency: normalizedCurrency, ownerMemberId: ownerMemberId, responsibleMemberId: responsibleMemberId)
         }

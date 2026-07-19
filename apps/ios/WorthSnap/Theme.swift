@@ -52,6 +52,42 @@ enum WCTheme {
     )
 }
 
+/// 使用系统字体保证中英文、数字和无障碍字号一致；标题采用圆角字形保持品牌温度。
+enum WCTypography {
+    static let hero = Font.system(size: 34, weight: .bold, design: .rounded)
+    static let largeNumber = Font.system(size: 40, weight: .heavy, design: .rounded)
+    static let title = Font.system(size: 24, weight: .bold, design: .rounded)
+    static let headline = Font.system(size: 17, weight: .semibold, design: .rounded)
+    static let body = Font.system(size: 16, weight: .regular, design: .rounded)
+    static let caption = Font.system(size: 12, weight: .regular, design: .rounded)
+}
+
+struct WCPrimaryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(WCTypography.headline)
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(WCTheme.goldFill, in: Capsule())
+            .opacity(configuration.isPressed ? 0.78 : 1)
+            .scaleEffect(configuration.isPressed ? 0.985 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    }
+}
+
+struct WCSecondaryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(WCTypography.headline)
+            .foregroundStyle(WCTheme.goldDeep)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 13)
+            .background(.white.opacity(configuration.isPressed ? 0.45 : 0.75), in: Capsule())
+            .overlay(Capsule().stroke(WCTheme.gold.opacity(0.24), lineWidth: 1))
+    }
+}
+
 /// 暖色玻璃卡片：圆角 + 渐变填充 + 细描边 + 柔和金色投影。
 struct WCCard: ViewModifier {
     var fill: LinearGradient = WCTheme.creamCard
@@ -84,6 +120,10 @@ extension View {
     /// List / Form 行的统一米色背景。
     func wcRow() -> some View {
         listRowBackground(Color.white.opacity(0.5))
+    }
+
+    func wcTitle() -> some View {
+        font(WCTypography.title).foregroundStyle(WCTheme.ink)
     }
 }
 
@@ -121,14 +161,22 @@ extension AppFormatters {
     /// "2026-06" → "2026 年 6 月"
     static func monthTitle(_ month: String) -> String {
         let parts = month.split(separator: "-")
-        guard parts.count == 2, let year = Int(parts[0]), let m = Int(parts[1]) else { return month }
-        return "\(year) 年 \(m) 月"
+        guard parts.count == 2, let year = Int(parts[0]), let value = Int(parts[1]),
+              let date = Calendar(identifier: .gregorian).date(from: DateComponents(year: year, month: value, day: 1)) else { return month }
+        let formatter = DateFormatter()
+        formatter.locale = .current
+        formatter.setLocalizedDateFormatFromTemplate("yMMMM")
+        return formatter.string(from: date)
     }
 
     /// "2026-06" → "6月"
     static func shortMonth(_ month: String) -> String {
         let parts = month.split(separator: "-")
-        guard parts.count == 2, let m = Int(parts[1]) else { return month }
-        return "\(m)月"
+        guard parts.count == 2, let year = Int(parts[0]), let value = Int(parts[1]),
+              let date = Calendar(identifier: .gregorian).date(from: DateComponents(year: year, month: value, day: 1)) else { return month }
+        let formatter = DateFormatter()
+        formatter.locale = .current
+        formatter.setLocalizedDateFormatFromTemplate("MMM")
+        return formatter.string(from: date)
     }
 }

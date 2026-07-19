@@ -25,7 +25,17 @@ struct OverviewView: View {
         return ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     header(snapshot: snapshot)
-                    NetWorthCard(totals: totals, snapshot: snapshot, ratio: comparison.netWorthRatio)
+
+                    if hasAccounts && !snapshot.completed {
+                        InventoryCard(snapshot: snapshot, confirmed: confirmed, total: entries.count, hasAccounts: hasAccounts)
+                    }
+
+                    NetWorthCard(
+                        totals: totals,
+                        snapshot: snapshot,
+                        ratio: snapshot.completed ? comparison.netWorthRatio : nil,
+                        unconfirmedCount: max(entries.count - confirmed, 0)
+                    )
 
                     HStack(spacing: 12) {
                         MetricTile(title: "总资产", dot: WCTheme.up, value: totals.totalAssets,
@@ -38,7 +48,9 @@ struct OverviewView: View {
                         if showsOwnershipBreakdown {
                             OwnershipBreakdownCard(snapshot: snapshot)
                         }
-                        InventoryCard(snapshot: snapshot, confirmed: confirmed, total: entries.count, hasAccounts: hasAccounts)
+                        if snapshot.completed {
+                            InventoryCard(snapshot: snapshot, confirmed: confirmed, total: entries.count, hasAccounts: hasAccounts)
+                        }
                         TrendCard(snapshot: snapshot)
                         StructureCard(snapshot: snapshot, totalAssets: totals.totalAssets)
                     } else {
@@ -62,7 +74,7 @@ struct OverviewView: View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("旺财")
-                    .font(.system(size: 32, weight: .bold, design: .rounded))
+                    .font(WCTypography.hero)
                     .foregroundStyle(WCTheme.goldDeep)
                 Text("\(AppFormatters.monthTitle(snapshot.month)) · \(snapshot.completed ? "已完成" : "盘点中")")
                     .font(.subheadline)
@@ -91,6 +103,7 @@ private struct NetWorthCard: View {
     var totals: SnapshotTotals
     var snapshot: Snapshot
     var ratio: Double?
+    var unconfirmedCount: Int
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -99,14 +112,14 @@ private struct NetWorthCard: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(WCTheme.inkTertiary)
                 Spacer()
-                Text("本位币 \(snapshot.baseCurrency)")
+                Text(unconfirmedCount > 0 ? "暂估 · \(snapshot.baseCurrency)" : "已确认 · \(snapshot.baseCurrency)")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(WCTheme.goldText)
                     .padding(.horizontal, 9).padding(.vertical, 3)
                     .background(WCTheme.gold.opacity(0.14), in: Capsule())
             }
             Text(AppFormatters.symbolized(totals.netWorth, currency: snapshot.baseCurrency))
-                .font(.system(size: 40, weight: .heavy, design: .rounded))
+                .font(WCTypography.largeNumber)
                 .foregroundStyle(WCTheme.ink)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
@@ -114,6 +127,10 @@ private struct NetWorthCard: View {
                 Text("\(AppFormatters.signedPercent(ratio)) 较上月")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(AppFormatters.changeColor(ratio))
+            } else if unconfirmedCount > 0 {
+                Label("沿用上月余额，还有 \(unconfirmedCount) 个账户待确认", systemImage: "info.circle")
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(WCTheme.goldText)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -234,7 +251,14 @@ private struct InventoryCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("本月盘点").font(.headline).foregroundStyle(WCTheme.ink)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(remaining > 0 ? "完成本月盘点" : "本月盘点已完成")
+                        .font(.headline).foregroundStyle(WCTheme.ink)
+                    if remaining > 0 {
+                        Text("还有 \(remaining) 个账户，预计 \(max(1, remaining / 3)) 分钟")
+                            .font(.caption).foregroundStyle(WCTheme.inkTertiary)
+                    }
+                }
                 Spacer()
                 Text("\(confirmed) / \(total) 已确认")
                     .font(.subheadline).foregroundStyle(WCTheme.inkTertiary)
@@ -247,7 +271,7 @@ private struct InventoryCard: View {
                         Text("先添加第一个账户 →").font(.subheadline.weight(.bold)).foregroundStyle(WCTheme.goldDeep)
                     }
                 } else {
-                    Text(remaining > 0 ? "还有 \(remaining) 个账户待确认" : "本月已全部确认")
+                    Text(remaining > 0 ? "确认后生成本月正式结果" : "共确认 \(total) 个账户")
                         .font(.subheadline).foregroundStyle(WCTheme.inkTertiary)
                     Spacer()
                     if remaining > 0 {

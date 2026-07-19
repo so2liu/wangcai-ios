@@ -4,7 +4,7 @@ import WorthSnapShared
 
 struct TrendView: View {
     @EnvironmentObject private var store: AppStore
-    @State private var direction: Direction?
+    @State private var pendingDelete: Snapshot?
 
     private var trendPoints: [(month: String, value: Double)] {
         store.data.snapshots
@@ -31,8 +31,25 @@ struct TrendView: View {
                                         .foregroundStyle(LinearGradient(colors: [WCTheme.gold.opacity(0.18), .clear], startPoint: .top, endPoint: .bottom))
                                 }
                             }
-                            .chartXAxis(.hidden)
-                            .chartYAxis(.hidden)
+                            .chartXAxis {
+                                AxisMarks(values: Array(trendPoints.indices)) { value in
+                                    if let index = value.as(Int.self), index < trendPoints.count {
+                                        AxisValueLabel {
+                                            Text(AppFormatters.shortMonth(trendPoints[index].month))
+                                        }
+                                    }
+                                }
+                            }
+                            .chartYAxis {
+                                AxisMarks(position: .leading) { value in
+                                    AxisGridLine().foregroundStyle(WCTheme.gold.opacity(0.1))
+                                    AxisValueLabel {
+                                        if let amount = value.as(Double.self) {
+                                            Text(AppFormatters.readableAmount(Decimal(amount)))
+                                        }
+                                    }
+                                }
+                            }
                             .frame(height: 140)
                         }
                         .padding(.vertical, 4)
@@ -69,12 +86,23 @@ struct TrendView: View {
                     }
                     .onDelete { offsets in
                         let snapshots = store.sortedSnapshots
-                        offsets.map { snapshots[$0] }.forEach(store.deleteSnapshot)
+                        pendingDelete = offsets.first.map { snapshots[$0] }
                     }
                 }
                 .wcRow()
-                Section("类型占比") {
-                    ForEach(typeTotals(), id: \.0) { name, amount in
+                Section("资产构成") {
+                    ForEach(typeTotals(direction: .asset), id: \.0) { name, amount in
+                        HStack {
+                            Text(name).foregroundStyle(WCTheme.inkSecondary)
+                            Spacer()
+                            Text(AppFormatters.symbolized(amount, currency: store.data.ledger.baseCurrency))
+                                .foregroundStyle(WCTheme.inkTertiary)
+                        }
+                    }
+                }
+                .wcRow()
+                Section("负债构成") {
+                    ForEach(typeTotals(direction: .liability), id: \.0) { name, amount in
                         HStack {
                             Text(name).foregroundStyle(WCTheme.inkSecondary)
                             Spacer()
@@ -87,14 +115,26 @@ struct TrendView: View {
             }
             .wcScreen()
             .tint(WCTheme.goldDeep)
-            .navigationTitle("趋势")
+            .navigationTitle("资产变化")
+            .alert("删除整月记录？", isPresented: Binding(
+                get: { pendingDelete != nil },
+                set: { if !$0 { pendingDelete = nil } }
+            )) {
+                Button("取消", role: .cancel) { pendingDelete = nil }
+                Button("确认删除", role: .destructive) {
+                    if let pendingDelete { store.deleteSnapshot(pendingDelete) }
+                    pendingDelete = nil
+                }
+            } message: {
+                Text("将删除 \(AppFormatters.monthTitle(pendingDelete?.month ?? "")) 及其中全部账户记录。此操作无法撤销。")
+            }
         }
     }
 
-    private func typeTotals() -> [(String, Decimal)] {
+    private func typeTotals(direction: Direction) -> [(String, Decimal)] {
         var result: [String: Decimal] = [:]
         guard let latest = store.sortedValidSnapshots.first else { return [] }
-        for entry in store.entries(for: latest) {
+        for entry in store.entries(for: latest) where entry.accountDirection == direction {
             result[store.typeName(id: entry.accountTypeId), default: 0] += entry.convertedAmount
         }
         return result.sorted { $0.value > $1.value }

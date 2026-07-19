@@ -1,22 +1,128 @@
 import SwiftUI
 import CloudKit
 import Combine
+import StoreKit
 import WorthSnapShared
 
 @main
 struct WorthSnapApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var store = AppStore()
+    @StateObject private var purchases = PurchaseManager()
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environmentObject(store)
+                .environmentObject(purchases)
                 .onAppear {
                     appDelegate.store = store
                     if #available(iOS 17.0, *) { store.bootstrapCloudSync() }
                 }
         }
+    }
+}
+
+/// 一次性永久买断。权益以 App Store 签名交易为准，不在本地伪造购买状态。
+@MainActor
+final class PurchaseManager: ObservableObject {
+    static let lifetimeProductId = "com.yueyu.WorthSnap.lifetime"
+    static let freeAccountLimit = 5
+    static let freeSnapshotLimit = 2
+
+    @Published private(set) var lifetimeProduct: Product?
+    @Published private(set) var isPremium = false
+    @Published private(set) var isLoading = false
+    @Published var showPaywall = false
+    @Published var message: String?
+
+    private var updatesTask: Task<Void, Never>?
+
+    init() {
+        updatesTask = Task { [weak self] in
+            for await update in Transaction.updates {
+                guard let self else { return }
+                if case .verified(let transaction) = update {
+                    await transaction.finish()
+                    await self.refreshEntitlements()
+                }
+            }
+        }
+        Task {
+            await loadProduct()
+            await refreshEntitlements()
+        }
+    }
+
+    deinit { updatesTask?.cancel() }
+
+    var displayPrice: String { lifetimeProduct?.displayPrice ?? String(localized: "Price shown by the App Store") }
+
+    func loadProduct() async {
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            lifetimeProduct = try await Product.products(for: [Self.lifetimeProductId]).first
+        } catch {
+            message = String(localized: "Unable to connect to the App Store. Please try again later.")
+        }
+    }
+
+    func purchaseLifetime() async {
+        guard let product = lifetimeProduct else {
+            await loadProduct()
+            if lifetimeProduct == nil { return }
+            await purchaseLifetime()
+            return
+        }
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            switch try await product.purchase() {
+            case .success(let verification):
+                guard case .verified(let transaction) = verification else {
+                    message = String(localized: "The purchase could not be verified.")
+                    return
+                }
+                await transaction.finish()
+                await refreshEntitlements()
+                if isPremium { showPaywall = false }
+            case .pending:
+                message = String(localized: "The purchase is pending approval.")
+            case .userCancelled:
+                break
+            @unknown default:
+                break
+            }
+        } catch {
+            message = error.localizedDescription
+        }
+    }
+
+    func restorePurchases() async {
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            try await StoreKit.AppStore.sync()
+            await refreshEntitlements()
+            message = isPremium
+                ? String(localized: "Your lifetime purchase has been restored.")
+                : String(localized: "No restorable purchase was found for this Apple Account.")
+        } catch {
+            message = error.localizedDescription
+        }
+    }
+
+    func refreshEntitlements() async {
+        var unlocked = false
+        for await result in Transaction.currentEntitlements {
+            if case .verified(let transaction) = result,
+               transaction.productID == Self.lifetimeProductId,
+               transaction.revocationDate == nil {
+                unlocked = true
+            }
+        }
+        isPremium = unlocked
     }
 }
 
@@ -47,7 +153,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     private func handle(_ metadata: CKShare.Metadata) {
         guard #available(iOS 17.0, *) else { return }
         Task { @MainActor in
-            await store?.acceptFamilyShare(metadata)
+            store?.offerFamilyShare(metadata)
         }
     }
 }
@@ -61,6 +167,8 @@ final class AppStore: ObservableObject {
     @Published private(set) var loadFailed: Bool = false
     /// 安全模式下，损坏原文件被复制到的备份路径（供 UI 告知用户）。
     @Published private(set) var corruptBackupURL: URL?
+    @Published private(set) var familyJoinBackupURL: URL?
+    @Published var pendingFamilyShareMetadata: CKShare.Metadata?
 
     /// iCloud 家庭共享协调器。懒加载：仅在用户开启同步后创建。
     private var _cloud: Any?
@@ -91,7 +199,17 @@ final class AppStore: ObservableObject {
 
         guard FileManager.default.fileExists(atPath: url.path) else {
             // 只有文件确实不存在才是全新安装；读取失败必须进入安全模式。
-            let seeded = WorthSnapEngine.seededData()
+            var seeded = WorthSnapEngine.seededData()
+            let regionalCurrency = Locale.current.currency?.identifier ?? "USD"
+            seeded.ledger.baseCurrency = regionalCurrency
+            seeded.ledger.name = String(localized: "My WorthSnap Ledger")
+            if let memberIndex = seeded.members.firstIndex(where: { $0.id == seeded.currentMemberId }) {
+                seeded.members[memberIndex].name = String(localized: "Me")
+            }
+            for index in seeded.snapshots.indices {
+                seeded.snapshots[index].baseCurrency = regionalCurrency
+                seeded.snapshots[index].exchangeRates = [regionalCurrency: 1]
+            }
             data = seeded
             selectedMonth = AppStore.latestMonth(in: seeded)
             return
@@ -135,6 +253,20 @@ final class AppStore: ObservableObject {
         }
     }
 
+    /// 首次引导尚未创建账户时允许选择本位币；已有数据后不允许直接换口径。
+    func setInitialBaseCurrency(_ currency: String) {
+        guard data.accounts.isEmpty else { return }
+        let normalized = currency.uppercased()
+        data.ledger.baseCurrency = normalized
+        data.ledger.updatedAt = Date()
+        for index in data.snapshots.indices {
+            data.snapshots[index].baseCurrency = normalized
+            data.snapshots[index].exchangeRates = [normalized: 1]
+            data.snapshots[index].updatedAt = Date()
+        }
+        save()
+    }
+
     /// 只写盘、不触发云推送。供本地保存与「合并远端变更」复用，避免远端→本地→再回推的回声。
     private func persist() {
         // 安全模式下绝不写盘，保护磁盘上仍然完好的原文件。
@@ -170,7 +302,31 @@ final class AppStore: ObservableObject {
     /// 加入前清空本地单机的可同步数据（仅保留「自己」这名成员），让位给共享家庭、
     /// 避免旧账户/快照被回传污染对方家庭。
     @available(iOS 17.0, *)
+    func offerFamilyShare(_ metadata: CKShare.Metadata) {
+        pendingFamilyShareMetadata = metadata
+    }
+
+    @available(iOS 17.0, *)
+    func declineFamilyShare() {
+        pendingFamilyShareMetadata = nil
+    }
+
+    @available(iOS 17.0, *)
+    func confirmPendingFamilyShare() async {
+        guard let metadata = pendingFamilyShareMetadata else { return }
+        pendingFamilyShareMetadata = nil
+        await acceptFamilyShare(metadata)
+    }
+
+    @available(iOS 17.0, *)
     func acceptFamilyShare(_ metadata: CKShare.Metadata) async {
+        // 加入家庭会采用对方账本。先自动保留完整本地副本，避免用户原单机数据不可逆消失。
+        if let payload = try? WorthSnapStore.encode(data) {
+            let backupURL = url.deletingLastPathComponent().appendingPathComponent("worthsnap-before-family-join.json")
+            if (try? payload.write(to: backupURL, options: .atomic)) != nil {
+                familyJoinBackupURL = backupURL
+            }
+        }
         await cloud.acceptShare(metadata) { [weak self] in
             guard let self else { return }
             let me = self.data.currentMember ?? Member(name: WorthSnapEngine.defaultMemberName)
@@ -307,12 +463,35 @@ final class AppStore: ObservableObject {
         }
     }
 
+    /// 找到同一账户的上月记录，供盘点页说明当前预填金额来自哪里。
+    func previousEntry(for entry: SnapshotEntry) -> SnapshotEntry? {
+        guard let current = data.snapshots.first(where: { $0.id == entry.snapshotId }),
+              let previousMonth = WorthSnapEngine.previousMonth(current.month),
+              let previous = data.snapshots.first(where: { $0.month == previousMonth }) else { return nil }
+        return data.entries.first { $0.snapshotId == previous.id && $0.accountId == entry.accountId }
+    }
+
     func account(id: UUID) -> Account? {
         data.accounts.first { $0.id == id }
     }
 
+    /// 账户口径由归属人维护；共同账户允许家庭成员维护。
+    func canManage(_ account: Account) -> Bool {
+        account.ownerMemberId == nil || account.ownerMemberId == data.currentMemberId
+    }
+
+    /// 月度金额由指定负责人维护；未指定时回退到归属人，共同账户允许所有成员维护。
+    func canUpdate(_ entry: SnapshotEntry) -> Bool {
+        guard let account = account(id: entry.accountId) else { return false }
+        if let responsible = account.responsibleMemberId { return responsible == data.currentMemberId }
+        return account.ownerMemberId == nil || account.ownerMemberId == data.currentMemberId
+    }
+
     func typeName(id: UUID) -> String {
-        data.accountTypes.first { $0.id == id }?.name ?? "未分类"
+        guard let name = data.accountTypes.first(where: { $0.id == id })?.name else {
+            return String(localized: "Uncategorized")
+        }
+        return String(localized: String.LocalizationValue(name))
     }
 
     @discardableResult
@@ -337,10 +516,38 @@ final class AppStore: ObservableObject {
         save()
     }
 
-    func addAccount(name: String, direction: Direction, typeId: UUID, currency: String, ownerMemberId: UUID?, responsibleMemberId: UUID?) {
+    func addAccount(name: String, direction: Direction, typeId: UUID, currency: String, ownerMemberId: UUID?, responsibleMemberId: UUID?, initialAmount: Decimal? = nil) {
         let order = (data.accounts.map(\.sortOrder).max() ?? 0) + 1
         let account = Account(ledgerId: data.ledger.id, name: name, direction: direction, typeId: typeId, currency: currency, ownerMemberId: ownerMemberId, responsibleMemberId: responsibleMemberId, sortOrder: order)
         WorthSnapEngine.addAccount(account, to: &data)
+        if let initialAmount, let snapshot = selectedSnapshot,
+           let entry = data.entries.first(where: { $0.snapshotId == snapshot.id && $0.accountId == account.id }),
+           entry.exchangeRate > 0 {
+            WorthSnapEngine.updateEntry(entryId: entry.id, amount: initialAmount, confirmed: true, in: &data)
+        }
+        save()
+    }
+
+    /// 首次使用时批量建立账户并写入本月余额，只保存一次，避免用户在页面之间往返。
+    func completeFirstRun(with items: [(name: String, typeName: String, direction: Direction, amount: Decimal)]) {
+        guard data.accounts.isEmpty, let snapshot = selectedSnapshot else { return }
+        for (offset, item) in items.enumerated() {
+            guard let type = data.accountTypes.first(where: { $0.name == item.typeName && $0.direction == item.direction }) else { continue }
+            let account = Account(
+                ledgerId: data.ledger.id,
+                name: item.name,
+                direction: item.direction,
+                typeId: type.id,
+                currency: data.ledger.baseCurrency,
+                ownerMemberId: data.currentMemberId,
+                responsibleMemberId: data.currentMemberId,
+                sortOrder: offset + 1
+            )
+            WorthSnapEngine.addAccount(account, to: &data)
+            if let entry = data.entries.first(where: { $0.snapshotId == snapshot.id && $0.accountId == account.id }) {
+                WorthSnapEngine.updateEntry(entryId: entry.id, amount: item.amount, confirmed: true, in: &data)
+            }
+        }
         save()
     }
 
@@ -375,7 +582,8 @@ final class AppStore: ObservableObject {
     }
 
     func memberName(id: UUID?) -> String {
-        data.member(id: id)?.name ?? "共同"
+        guard let member = data.member(id: id) else { return String(localized: "Shared") }
+        return member.name == WorthSnapEngine.defaultMemberName ? String(localized: "Me") : member.name
     }
 
     func addMember(name: String) {

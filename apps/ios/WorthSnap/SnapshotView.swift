@@ -3,6 +3,7 @@ import WorthSnapShared
 
 struct SnapshotView: View {
     @EnvironmentObject private var store: AppStore
+    @EnvironmentObject private var purchases: PurchaseManager
     @FocusState private var focusedEntryId: UUID?
 
     var body: some View {
@@ -28,13 +29,13 @@ struct SnapshotView: View {
 
                     HStack {
                         Button {
-                            store.createAdjacentSnapshot(offset: -1)
+                            openAdjacent(offset: -1)
                         } label: {
                             Label("上月", systemImage: "chevron.left")
                         }
                         Spacer()
                         Button {
-                            store.createAdjacentSnapshot(offset: 1)
+                            openAdjacent(offset: 1)
                         } label: {
                             Label("下月", systemImage: "chevron.right")
                         }
@@ -84,7 +85,7 @@ struct SnapshotView: View {
             }
             .wcScreen()
             .tint(WCTheme.goldDeep)
-            .navigationTitle("快照")
+            .navigationTitle("月度盘点")
             .scrollDismissesKeyboard(.interactively)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -97,6 +98,17 @@ struct SnapshotView: View {
                     }
                 }
             }
+    }
+
+    private func openAdjacent(offset: Int) {
+        let current = WorthSnapEngine.isValidMonth(store.selectedMonth) ? store.selectedMonth : WorthSnapEngine.currentMonth()
+        let target = offset < 0 ? WorthSnapEngine.previousMonth(current) : WorthSnapEngine.nextMonth(current)
+        let alreadyExists = target.map { month in store.data.snapshots.contains { $0.month == month } } ?? false
+        if alreadyExists || purchases.isPremium || store.cloud.isParticipant || store.sortedValidSnapshots.count < PurchaseManager.freeSnapshotLimit {
+            store.createAdjacentSnapshot(offset: offset)
+        } else {
+            purchases.showPaywall = true
+        }
     }
 }
 
@@ -118,6 +130,9 @@ private struct SnapshotEntryRow: View {
     @State private var rateText = ""
     @State private var validationMessage: String?
 
+    private var previousEntry: SnapshotEntry? { store.previousEntry(for: entry) }
+    private var canUpdate: Bool { store.canUpdate(entry) }
+
     var body: some View {
         if store.account(id: entry.accountId) != nil {
             VStack(alignment: .leading, spacing: 10) {
@@ -129,10 +144,20 @@ private struct SnapshotEntryRow: View {
                         Text("\(store.typeName(id: entry.accountTypeId)) · \(entry.currency)")
                             .font(.caption)
                             .foregroundStyle(WCTheme.inkTertiary)
+                        if let previousEntry {
+                            Text("上月 \(AppFormatters.symbolized(previousEntry.amount, currency: previousEntry.currency))")
+                                .font(.caption)
+                                .foregroundStyle(WCTheme.inkFaint)
+                        }
                     }
                     Spacer()
                     Image(systemName: entry.confirmed ? "checkmark.circle.fill" : "circle")
                         .foregroundStyle(entry.confirmed ? WCTheme.up : WCTheme.inkFaint)
+                }
+                if !canUpdate {
+                    Label("Updated by \(store.memberName(id: store.account(id: entry.accountId)?.responsibleMemberId ?? store.account(id: entry.accountId)?.ownerMemberId))", systemImage: "person.crop.circle")
+                        .font(.caption)
+                        .foregroundStyle(WCTheme.inkTertiary)
                 }
                 if entry.currency != store.data.ledger.baseCurrency {
                     HStack {
@@ -152,6 +177,7 @@ private struct SnapshotEntryRow: View {
                             }
                         }
                         .buttonStyle(.borderless)
+                        .disabled(!canUpdate)
                     }
                     if entry.exchangeRate <= 0 {
                         Label("缺少汇率，该账户暂不计入汇总且不能确认", systemImage: "exclamationmark.triangle")
@@ -169,6 +195,7 @@ private struct SnapshotEntryRow: View {
                         .font(.body.monospacedDigit())
                         .multilineTextAlignment(.trailing)
                         .focused(focusedEntryId, equals: entry.id)
+                        .disabled(!canUpdate)
                     Button {
                         let rawAmount = amountText.trimmingCharacters(in: .whitespacesAndNewlines)
                         if store.updateEntry(entry, rawAmount: rawAmount.isEmpty ? entry.amount.description : rawAmount, confirmed: true) {
@@ -179,9 +206,10 @@ private struct SnapshotEntryRow: View {
                             validationMessage = entry.exchangeRate <= 0 ? "请先设置汇率" : "请输入有效的非负金额"
                         }
                     } label: {
-                        Label("确认", systemImage: "checkmark")
+                        Label(amountText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "金额没变，确认" : "保存并确认", systemImage: "checkmark")
                     }
                     .buttonStyle(.borderless)
+                    .disabled(!canUpdate)
                 }
                 if let validationMessage {
                     Text(validationMessage).font(.caption).foregroundStyle(.red)

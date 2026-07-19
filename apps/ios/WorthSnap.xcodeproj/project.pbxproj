@@ -23,6 +23,8 @@
 		CC4B173F2E21616E6DCA2214 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 1DB92CC54EAD5F298797A1DF /* PrivacyInfo.xcprivacy */; };
 		D1D41FAB7AC35970EE67C0A3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F8660AEDA52799C3E1A9BDCD /* Assets.xcassets */; };
 		D796FC1E2A385048541910B8 /* Formatters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 341D8FAB9EADFDAD97692AF0 /* Formatters.swift */; };
+		AA1000000000000000000001 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = AA1000000000000000000011 /* Localizable.strings */; };
+		AA1000000000000000000002 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = AA1000000000000000000012 /* InfoPlist.strings */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -44,6 +46,10 @@
 		F6123D412453B4A17C31AA6D /* FamilySharing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FamilySharing.swift; sourceTree = "<group>"; };
 		F8660AEDA52799C3E1A9BDCD /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		F92A37C21BF96AA7C9673A31 /* AccountsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountsView.swift; sourceTree = "<group>"; };
+		AA1000000000000000000021 /* en Localizable.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
+		AA1000000000000000000022 /* zh-Hans Localizable.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
+		AA1000000000000000000023 /* en InfoPlist.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		AA1000000000000000000024 /* zh-Hans InfoPlist.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -77,6 +83,8 @@
 				0B7C25F044A065F46AAB572A /* TrendView.swift */,
 				B3891914387F8C282A67E27F /* WorthSnap.entitlements */,
 				E0E8D0910FDF88D4C1DED08F /* WorthSnapApp.swift */,
+				AA1000000000000000000011 /* Localizable.strings */,
+				AA1000000000000000000012 /* InfoPlist.strings */,
 			);
 			path = WorthSnap;
 			sourceTree = "<group>";
@@ -149,6 +157,7 @@
 			knownRegions = (
 				Base,
 				en,
+				"zh-Hans",
 			);
 			mainGroup = 318ABF4F535D99A76A03ADD6;
 			minimizedProjectReferenceProxies = 1;
@@ -172,6 +181,8 @@
 			files = (
 				D1D41FAB7AC35970EE67C0A3 /* Assets.xcassets in Resources */,
 				CC4B173F2E21616E6DCA2214 /* PrivacyInfo.xcprivacy in Resources */,
+				AA1000000000000000000001 /* Localizable.strings in Resources */,
+				AA1000000000000000000002 /* InfoPlist.strings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -200,6 +211,27 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXVariantGroup section */
+		AA1000000000000000000011 /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				AA1000000000000000000021 /* en Localizable.strings */,
+				AA1000000000000000000022 /* zh-Hans Localizable.strings */,
+			);
+			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
+		AA1000000000000000000012 /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				AA1000000000000000000023 /* en InfoPlist.strings */,
+				AA1000000000000000000024 /* zh-Hans InfoPlist.strings */,
+			);
+			name = InfoPlist.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
 /* Begin XCBuildConfiguration section */
 		3F113680A0088B46CDE0D987 /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -211,6 +243,7 @@
 				DEVELOPMENT_TEAM = 366ADQ28F6;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "旺财";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UIBackgroundModes = "remote-notification";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -358,6 +391,7 @@
 				DEVELOPMENT_TEAM = 366ADQ28F6;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "旺财";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UIBackgroundModes = "remote-notification";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

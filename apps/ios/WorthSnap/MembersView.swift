@@ -3,7 +3,7 @@ import WorthSnapShared
 
 /// 家庭成员管理：新增、改名、移除（归档）。
 /// 移除遵循「人走数据留」——归档成员不删除其归属/负责的账户与历史，负责账户转交本人。
-/// 多人共享由设置页的实验性 iCloud 家庭共享提供。
+/// 多人共享由设置页的 iCloud 家庭同步提供。
 struct MembersView: View {
     @EnvironmentObject private var store: AppStore
     @State private var showingAdd = false
@@ -65,7 +65,7 @@ struct MembersView: View {
             Button("取消", role: .cancel) {}
             Button("添加") { store.addMember(name: newName) }
         } message: {
-            Text("这里添加的是账本中的成员资料；跨设备共享需在设置页开启实验性 iCloud 家庭共享并发送邀请。")
+            Text("这里添加的是账本中的成员资料；跨设备共享需在设置页开启 iCloud 家庭同步并发送邀请。")
         }
         .alert("重命名成员", isPresented: Binding(
             get: { renaming != nil },

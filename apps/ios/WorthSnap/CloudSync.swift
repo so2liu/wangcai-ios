@@ -3,9 +3,8 @@ import CloudKit
 import os
 import WorthSnapShared
 
-// ⚠️ 本文件实现 CKShare 家庭共享的 CloudKit 同步层。
-// 它结构完整、贴近可编译，但【未在真机 + 双 iCloud 账号环境验证】。
-// 上线前必须：在 Xcode 里编译修正可能的 API 细节、在两台真机用两个 iCloud 账号联调。
+// 本文件实现 CKShare 家庭共享的 CloudKit 同步层。
+// 上线门槛：必须在两台真机、两个 iCloud 账号下完成 docs/cloudkit-sharing-testing.md 全部项目。
 // 依赖配置（见 project.yml / 项目说明）：
 //   1) iCloud capability，容器 = iCloud.com.yueyu.WorthSnap
 //   2) Background Modes → Remote notifications
@@ -63,6 +62,7 @@ final class DatabaseSyncEngine: NSObject, CKSyncEngineDelegate, @unchecked Senda
     private let recordProvider: (String) -> SyncRecord?
     /// 把远端拉取/删除的变更交回协调器合并进本地。
     private let onRemoteChanges: ([SyncRecord], [String]) -> Void
+    private let onZoneDeleted: () -> Void
     /// 持久化 CKSyncEngine 状态（change token 等）。
     private let stateStore: SyncStateStore
 
@@ -70,12 +70,14 @@ final class DatabaseSyncEngine: NSObject, CKSyncEngineDelegate, @unchecked Senda
          zoneID: CKRecordZone.ID,
          stateStore: SyncStateStore,
          recordProvider: @escaping (String) -> SyncRecord?,
-         onRemoteChanges: @escaping ([SyncRecord], [String]) -> Void) {
+         onRemoteChanges: @escaping ([SyncRecord], [String]) -> Void,
+         onZoneDeleted: @escaping () -> Void = {}) {
         self.database = database
         self.zoneID = zoneID
         self.stateStore = stateStore
         self.recordProvider = recordProvider
         self.onRemoteChanges = onRemoteChanges
+        self.onZoneDeleted = onZoneDeleted
         super.init()
 
         var configuration = CKSyncEngine.Configuration(
@@ -123,6 +125,7 @@ final class DatabaseSyncEngine: NSObject, CKSyncEngineDelegate, @unchecked Senda
             // 整个 zone 被删除（如对方停止共享）：把该 zone 下数据视为不可用。
             for deletion in changes.deletions {
                 log.info("zone deleted: \(deletion.zoneID.zoneName)")
+                if deletion.zoneID == zoneID { onZoneDeleted() }
             }
         case .sentRecordZoneChanges, .sentDatabaseChanges,
              .willFetchChanges, .didFetchChanges, .willSendChanges, .didSendChanges,
