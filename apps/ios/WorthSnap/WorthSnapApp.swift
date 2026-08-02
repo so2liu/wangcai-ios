@@ -4,6 +4,12 @@ import Combine
 import StoreKit
 import WorthSnapShared
 
+enum AppRuntime {
+    static var isOnboardingTest: Bool {
+        Bundle.main.bundleIdentifier == "com.yueyu.WorthSnap.OnboardingTest"
+    }
+}
+
 @main
 struct WorthSnapApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
@@ -17,7 +23,9 @@ struct WorthSnapApp: App {
                 .environmentObject(purchases)
                 .onAppear {
                     appDelegate.store = store
-                    if #available(iOS 17.0, *) { store.bootstrapCloudSync() }
+                    if !AppRuntime.isOnboardingTest, #available(iOS 17.0, *) {
+                        store.bootstrapCloudSync()
+                    }
                 }
         }
     }

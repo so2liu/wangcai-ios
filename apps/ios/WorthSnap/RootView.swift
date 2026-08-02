@@ -25,7 +25,7 @@ struct RootView: View {
         .task(id: purchases.isPremium) {
             store.selectCurrentMonth(
                 createIfMissing: purchases.isPremium
-                    || store.cloud.isParticipant
+                    || (!AppRuntime.isOnboardingTest && store.cloud.isParticipant)
                     || store.sortedValidSnapshots.count < PurchaseManager.freeSnapshotLimit
             )
         }
@@ -200,29 +200,45 @@ private struct FirstRunView: View {
     }
 
     private var welcome: some View {
-        VStack(alignment: .leading, spacing: 22) {
+        VStack(alignment: .leading, spacing: 20) {
             Spacer()
-            Image(systemName: "sparkles")
-                .font(.system(size: 42))
-                .foregroundStyle(WCTheme.goldDeep)
-            Text("每月 3 分钟，\n看清自己的资产变化")
-                .font(WCTypography.hero)
+            Image(systemName: "chart.line.uptrend.xyaxis")
+                .font(.system(size: 24, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 52, height: 52)
+                .background(WCTheme.goldDeep, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            Text("每月 3 分钟，\n看清资产变化")
+                .font(.system(size: 30, weight: .bold, design: .rounded))
                 .foregroundStyle(WCTheme.ink)
             Text("不用记每一笔消费。只需每月更新一次银行卡、基金和信用卡等账户余额，旺财会帮你留下长期变化。")
                 .font(.body)
                 .foregroundStyle(WCTheme.inkSecondary)
                 .lineSpacing(5)
-            VStack(alignment: .leading, spacing: 12) {
-                Label("不连接银行，不读取交易流水", systemImage: "hand.raised")
-                Label("数据默认保存在这台设备上", systemImage: "internaldrive")
-                Label("第一次盘点约 3 分钟", systemImage: "clock")
+            VStack(spacing: 0) {
+                onboardingFeature("不连接银行，不读取交易流水", icon: "hand.raised")
+                Divider().padding(.leading, 42)
+                onboardingFeature("数据默认保存在这台设备上", icon: "internaldrive")
+                Divider().padding(.leading, 42)
+                onboardingFeature("第一次盘点约 3 分钟", icon: "clock")
             }
-            .font(.subheadline)
-            .foregroundStyle(WCTheme.inkSecondary)
+            .wcCard(padding: 0)
             Spacer()
             primaryButton("开始第一次盘点") { step = 1 }
         }
         .padding(24)
+    }
+
+    private func onboardingFeature(_ title: LocalizedStringKey, icon: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .foregroundStyle(WCTheme.goldDeep)
+                .frame(width: 30)
+            Text(title)
+                .font(.subheadline)
+                .foregroundStyle(WCTheme.inkSecondary)
+            Spacer()
+        }
+        .padding(14)
     }
 
     private var templatePicker: some View {
@@ -242,8 +258,9 @@ private struct FirstRunView: View {
                 }
                 .pickerStyle(.menu)
             }
-            .padding(.horizontal, 14)
-            .background(.white.opacity(0.7), in: RoundedRectangle(cornerRadius: 14))
+            .padding(14)
+            .background(WCTheme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(WCTheme.cardStroke, lineWidth: 1))
             ScrollView {
                 LazyVStack(spacing: 10) {
                     ForEach(templates) { item in
@@ -271,7 +288,8 @@ private struct FirstRunView: View {
                                     .foregroundStyle(selectedIds.contains(item.id) ? WCTheme.goldDeep : WCTheme.inkFaint)
                             }
                             .padding(14)
-                            .background(.white.opacity(0.7), in: RoundedRectangle(cornerRadius: 16))
+                            .background(WCTheme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(WCTheme.cardStroke, lineWidth: 1))
                         }
                         .buttonStyle(.plain)
                     }
@@ -317,11 +335,13 @@ private struct FirstRunView: View {
                                 ))
                                 .keyboardType(.decimalPad)
                                 .focused($focusedId, equals: item.id)
-                                .font(.title3.monospacedDigit())
+                                .font(.body.monospacedDigit())
+                                .multilineTextAlignment(.trailing)
                             }
                         }
                         .padding(14)
-                        .background(.white.opacity(0.7), in: RoundedRectangle(cornerRadius: 16))
+                        .background(WCTheme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(WCTheme.cardStroke, lineWidth: 1))
                     }
                 }
             }
